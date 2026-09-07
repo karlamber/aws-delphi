@@ -1,0 +1,48 @@
+---
+description: <ORG_NAME> IaC context - landscapes, environments, accounts, state, tags
+alwaysApply: true
+---
+
+# <ORG_NAME> IaC Context
+
+This is a **Terragrunt** monorepo for the **`{landscape}`** landscape on AWS in **`us-east-1`**.
+
+## Repository layout
+
+```
+{landscape}/
+├── terragrunt.hcl                # Root config: provider, remote state, inputs merge
+├── tf-modules/tf-{service}/      # Reusable Terraform modules
+└── {landscape}-{env}/
+    ├── account.hcl               # env, account_id, aws_profile, landscape
+    └── us-east-1/
+        ├── region.hcl
+        ├── {shared-stack}/       # vpc, ecs-cluster, ssm_param, github_oidc_*, etc.
+        └── {app_alias}/{stack}/  # ecs-service, ecs-ondemand, ssm_param, ddb-*, s3-*
+```
+
+## Environments
+
+`dev`, `tst`, `sb` (sandbox), `prod`. Hub landscape is the exception: production folder is `agora/`, not `agora-prod/`.
+
+## Accounts and profiles
+
+Each environment is its own AWS account. The `aws_profile` in `account.hcl` is the profile name — always verify with `aws sts get-caller-identity --profile <name>` before changes. Hub uses `agora`, `agora-dev`, `agora-tst` (not `agora-prod/`).
+
+## Remote state
+
+S3 bucket `s3-{landscape}-{env}-{region_short}-terraform-state` (e.g. `s3-nyx-sb-ue1-terraform-state`), DynamoDB table `terraform-locks`. Both are configured in the root `terragrunt.hcl`; do not redefine per-stack.
+
+## Default tags (applied via root provider)
+
+`Landscape`, `Environment`, `ProvisionedBy = "Terragrunt"`. Stack-specific tags add to these, never replace.
+
+## Never commit
+
+Tfstate, `.tfvars`, AWS credentials, SSM secret values, override files. The `.gitignore` already covers most; do not bypass.
+
+## Where to look for help
+
+- `README.md` (per repo)
+- Per-module `tf-modules/tf-*/README.md` where present
+- Other landscape repos use the same patterns: cross-reference rather than guess.

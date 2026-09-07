@@ -1,0 +1,65 @@
+---
+description: ECS service, on-demand task, and scheduled task stack conventions
+globs: **/ecs-service/**,**/ecs-ondemand/**,**/ecs-scheduled/**
+alwaysApply: false
+---
+
+# ECS Stack Conventions
+
+Three stack flavours: `ecs-service` (long-running), `ecs-ondemand` (RunTask), `ecs-scheduled` (EventBridge-triggered). They share most patterns.
+
+## Required dependencies
+
+`ecs_cluster`, `vpc`, plus any application data store (`ddb-*`, `s3-*`, `rabbitmq-broker`) the task uses.
+
+## Subnet tier pattern
+
+```hcl
+locals {
+  app_alias   = "mercury"
+  subnet_tier = "private"   # "isolated" | "private" | "public"
+}
+
+inputs = {
+  subnet_ids = (local.subnet_tier == "isolated" ? dependency.vpc.outputs.isolated_subnet_ids :
+                local.subnet_tier == "private"  ? dependency.vpc.outputs.private_subnet_ids  :
+                local.subnet_tier == "public"   ? dependency.vpc.outputs.public_subnet_ids   : [])
+
+  vpc_security_group_ids = (local.subnet_tier == "isolated" ? [dependency.vpc.outputs.isolated_security_group_id] :
+                            local.subnet_tier == "private"  ? [dependency.vpc.outputs.private_security_group_id]  :
+                            local.subnet_tier == "public"   ? [dependency.vpc.outputs.public_security_group_id]   : [])
+}
+```
+
+Default app workloads to `private`. `public` is only for ALB-fronted resources, `isolated` for databases.
+
+## Required service inputs
+
+`app_alias`, `cluster_arn`, `desired_count` (services only), `task_cpu`, `task_memory`, `network_mode = "awsvpc"`, `container_image`, `container_port`, `cpu_architecture`, `operating_system_family`.
+
+## Container image
+
+Use the ECR URI form `{account}.dkr.ecr.{region}.amazonaws.com/{repo}:{tag}`. Avoid `:latest` outside sandboxes; pin a tag from CI.
+
+## Container secrets
+
+```hcl
+container_secrets = [
+  { "name" : "ENV_NAME",  "valueFrom" : "/ENV/NYX/ENV_NAME" },
+  { "name" : "LOG_LEVEL", "valueFrom" : "/ENV/MERCURY/LOG_LEVEL" },
+]
+```
+
+`valueFrom` is the SSM path. Add the matching parameter in the corresponding `ssm_param` stack, then declare the dependency here.
+
+## IAM policies
+
+- `task_exec-policy_arns` — managed policies the **execution role** needs (always include `AmazonECSTaskExecutionRolePolicy` and `AmazonSSMReadOnlyAccess`).
+- `task_role-policy_arns` — managed policies the **task role** needs.
+- `custom-role_policy` — inline JSON for app-specific permissions; scope `Resource` ARNs by `${include.inputs.account_id}` and `${include.inputs.region}`, never `*` for cross-account writes.
+
+## Anti-patterns
+
+- Hardcoded subnet/SG IDs.
+- Missing `desired_count` on services (causes drift).
+- Empty `container_command` written as `[""]` instead of `[]`.

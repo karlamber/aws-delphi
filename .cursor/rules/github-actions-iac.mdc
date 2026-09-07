@@ -1,0 +1,55 @@
+---
+description: GitHub Actions workflows and OIDC for IaC and app deployments
+globs: **/.github/workflows/*.yml,**/.github/workflows/*.yaml
+alwaysApply: false
+---
+
+# GitHub Actions Conventions
+
+## OIDC, not long-lived keys
+
+Workflows that touch AWS authenticate via GitHub OIDC and `aws-actions/configure-aws-credentials`. The role they assume is provisioned per environment by the `github_oidc_provider` and `github_oidc_role` Terragrunt stacks.
+
+Required permissions for OIDC:
+
+```yaml
+permissions:
+  id-token: write
+  contents: read
+```
+
+`role-to-assume` must reference an existing role ARN — typically passed as a workflow input or set in environment-scoped variables.
+
+## Reusable workflows live in `<GITHUB_ORG>/actions`
+
+App and IaC repos consume them via `workflow_call`. Examples:
+
+- `<GITHUB_ORG>/actions/.github/workflows/ecs-app-deploy.yml`
+- `<GITHUB_ORG>/actions/.github/workflows/docker-ecr-build-push.yml`
+- `<GITHUB_ORG>/actions/.github/workflows/iac-quality-checks.yml`
+
+When changing inputs, update both the reusable workflow and every caller.
+
+## Environment selection
+
+Manual workflows expose an `env` input choice (`sb`, `dev`, `tst`, `prod`). Concurrency groups should include the environment so prod and dev runs do not block each other:
+
+```yaml
+concurrency:
+  group: ${{ github.workflow }}-${{ inputs.env }}
+  cancel-in-progress: false
+```
+
+## Bash steps
+
+Use `set -euo pipefail` (or rely on the action runner default), prefer `jq` for JSON parsing, and quote paths. Lint with `shellcheck` locally before committing complex scripts.
+
+## Secrets
+
+GitHub Secrets only for values that cannot live in SSM (rare). Most app config is read at runtime from SSM via `container_secrets` — workflows should not pass app secrets through env vars.
+
+## Anti-patterns
+
+- `aws-access-key-id` / `aws-secret-access-key` in workflow files.
+- Reusable workflow callers that pin `@main` instead of a version tag, then break on upstream changes.
+- Concurrency groups that span environments (prod and dev cancelling each other).

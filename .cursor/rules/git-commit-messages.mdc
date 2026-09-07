@@ -1,0 +1,46 @@
+---
+description: Git commit message conventions
+alwaysApply: true
+---
+
+# Git Commit Message Conventions
+
+## Format
+
+All commit messages must start with a ticket number:
+
+```
+PRDV-X: <message>
+```
+
+Where:
+
+- `PRDV-X` is the ticket number where `X` is numeric (e.g. `PRDV-12345`, `PRDV-1`, `PRDV-999`).
+- The message follows after a colon and space.
+- The message is clear and descriptive.
+
+## Examples
+
+Correct:
+
+```
+PRDV-12345: Add nyx tst lattice VPC association
+PRDV-321: Fix mercury ecs-service container_secrets ordering
+PRDV-7: Bump tf-vpc module flow log retention to 30 days
+```
+
+Incorrect:
+
+```
+Update terragrunt.hcl
+PRDV-12345Add lattice VPC association
+PRDV-12345 - Add lattice VPC association
+PRDV-ABC: Add lattice VPC association
+```
+
+## Guidelines
+
+- Keep the subject line under 72 characters when possible.
+- Use the imperative mood ("Add", "Fix", "Bump"), not past tense.
+- Reference related PRs or follow-up tickets in the body when relevant.
+- Group changes that belong together; avoid "fix typo + new feature" in one commit.

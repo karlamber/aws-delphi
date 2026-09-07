@@ -1,0 +1,74 @@
+---
+description: VPC, ALB, and shared networking stack conventions
+globs: **/vpc/terragrunt.hcl,**/alb/terragrunt.hcl,**/lattice_*/terragrunt.hcl
+alwaysApply: false
+---
+
+# Networking Stack Conventions
+
+## Address plan
+
+- AWS cloud supernet: `10.0.0.0/11` (see workspace `docs/network-allocations.yaml`).
+- Account / landscape block: `/20`.
+- Regional VPC (`tf-vpc` `vpc_cidr`): `/21` (one half of the account `/20` per region).
+- Subnets inside the `/21`: public `/25`, private `/24`, isolated `/25` (up to 3 AZs).
+
+## VPC
+
+Three-tier subnet design:
+
+- **public** — Internet-facing (ALB, NAT Gateway).
+- **private** — Application workloads (ECS services).
+- **isolated** — Databases (RDS, DocDB) and internal-only services.
+
+Standard VPC inputs (minimal = omit `availability_zone_ids` → 1 AZ):
+
+```hcl
+inputs = {
+  vpc_cidr                = "10.0.0.0/21"  # regional /21 from the account /20
+  create_internet_gateway = true
+  create_nat_gateways     = true
+  retention_in_days       = 7   # higher in prod (e.g. 30)
+}
+```
+
+Pass `availability_zone_ids` with 2–3 AZ IDs when you need multi-AZ. VPC Flow Logs are part of `tf-vpc`; keep `retention_in_days` proportional to environment criticality.
+
+Update `docs/network-allocations.yaml` when assigning a new `/20` or `/21`.
+
+## ALB
+
+```hcl
+inputs = {
+  detail                 = "<descriptor>"
+  certificate_arn        = dependency.tls.outputs.certificate_arn
+  vpc_id                 = dependency.vpc.outputs.vpc_id
+  subnet_ids             = dependency.vpc.outputs.public_subnet_ids
+  vpc_security_group_ids = [dependency.vpc.outputs.public_security_group_id]
+
+  applications = [
+    {
+      app_alias         = "<app>"
+      health_check_path = "/<app>/health"
+      target_port       = 3001
+      priority          = 2  # unique per ALB
+    }
+  ]
+}
+```
+
+`priority` must be unique across applications on the same ALB. Health check paths follow `/{app_alias}/health` unless the app dictates otherwise.
+
+## VPC Lattice associations
+
+Most landscapes use `lattice_vpc_association/` to attach the local VPC to the Hub-shared service network. Do not modify `lattice_network` (lives in `agora`); subscriber accounts only consume the share.
+
+## Cross-account / cross-landscape
+
+Cross-account access (e.g. mnemosyne RDS over Lattice, Janus DNS) uses pre-provisioned IAM roles assumed in the target account. Do not introduce new cross-account roles without principal engineer review.
+
+## Anti-patterns
+
+- Public subnets for application workloads.
+- ALB without HTTPS / certificate.
+- Modifying `vpc_cidr` after launch (causes destroy/recreate of the entire VPC).

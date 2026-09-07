@@ -1,0 +1,52 @@
+---
+description: Terraform module structure and conventions in tf-modules/
+globs: tf-modules/**/*.tf,tf-modules/**/README.md
+alwaysApply: false
+---
+
+# Terraform Module Conventions
+
+## Required layout
+
+```
+tf-modules/tf-{service}/
+├── main.tf           # Resource definitions
+├── variables.tf      # Input variables
+├── outputs.tf        # Output values
+├── providers.tf      # required_version + required_providers (when pinning)
+└── README.md         # Description, Usage, Requirements, Inputs, Outputs
+```
+
+## Variables
+
+- Name in `snake_case`.
+- Always include `description` and `type`.
+- Provide `default` for optional inputs; mark required inputs by omitting default and documenting in README.
+- Group related variables together; avoid alphabetical scrambling.
+
+## Outputs
+
+- Name in `snake_case`.
+- Include `description`.
+- Expose stable identifiers (ARNs, IDs, DNS names) that downstream stacks need; do not expose internal implementation detail.
+
+## Providers and versions
+
+- Pin `required_version` in `providers.tf` (e.g. `~> 1.9.8`). The Terragrunt `before_hook` reads this value via `tfenv`.
+- Pin `required_providers` versions when adding new providers.
+- Do not set provider blocks (region, profile) inside modules; the root `terragrunt.hcl` injects those.
+
+## No secrets, no environment values
+
+- Modules are reusable across landscapes and environments. Do not hardcode landscape, env, account ID, or app alias inside a module.
+- Pass those in via inputs.
+
+## README.md sections
+
+`## Description`, `## Usage`, `## Requirements`, `## Inputs`, `## Outputs`. Use a Markdown table for inputs and outputs with at least Name, Description, Type, Required (for inputs) and Description (for outputs).
+
+## When adding a new module
+
+- Mirror an existing similar module's structure (e.g. `tf-ssm_param`, `tf-ecs-service`).
+- Add a brief stub README before merging; full content can iterate.
+- Avoid breaking existing callers: add new inputs with safe defaults rather than renaming.

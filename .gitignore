@@ -1,0 +1,34 @@
+# --- Terraform / Terragrunt ---
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+crash.log
+crash.*.log
+override.tf
+override.tf.json
+*_override.tf
+*_override.tf.json
+*.tfplan
+tfplan
+.terraform.tfstate.lock.info
+.terragrunt-cache/
+**/.terragrunt-cache/
+
+# Keep .terraform.lock.hcl committed when present.
+
+# --- Local account inventory (never publish) ---
+**/account.hcl
+!**/account.hcl.example
+.env
+.env.*
+!.env.example
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+*.code-workspace

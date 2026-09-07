@@ -1,0 +1,40 @@
+---
+description: IaC change safety - blast radius, supervised applies, secrets, destructive flags
+alwaysApply: true
+---
+
+# IaC Change Safety
+
+## Before any change
+
+1. Confirm the AWS profile and account: `aws sts get-caller-identity --profile <name>`. The profile must match `account.hcl` for the stack you are touching.
+2. State the **blast radius** in plain language (which apps, accounts, environments, downstream consumers).
+3. Run `terragrunt plan` (or `terraform plan`) and have the principal engineer review the output before any apply.
+
+## Production and shared infrastructure
+
+`apply` to **prod** or any shared resource requires explicit principal engineer sign-off. Treat the following as high-impact and never modify without prior review:
+
+- VPC Lattice service networks, RAM shares, cross-account roles
+- DNS, certificates, edge security (CloudFront/WAF/ALB rules)
+- Remote state buckets and DynamoDB lock table
+- IAM roles/policies used by other stacks or accounts
+- Production databases (RDS) and shared messaging (Amazon MQ/RabbitMQ)
+
+## Destructive flags
+
+Do not introduce `force_destroy`, `force_delete`, `prevent_destroy = false`, or `lifecycle { ignore_changes = [...] }` removals without an explicit reason in code review. SSM parameter values intentionally use `ignore_changes = [value]`; preserve that.
+
+## Secrets
+
+No secrets in `*.tf`, `*.hcl`, `*.tfvars`, or commit messages. Use SSM Parameter Store (`SecureString`) and reference via `container_secrets` `valueFrom`. Real values are seeded outside Terraform and the SSM resource ignores changes to `value`.
+
+## Apply discipline
+
+- Apply one stack at a time. Avoid `run-all apply` outside sandboxes.
+- After apply, verify resources in the AWS Console or CLI; do not assume success from the Terraform exit code alone.
+- If a state lock is stuck, do not force-unlock without principal engineer approval.
+
+## When unsure
+
+Stop and ask. A delayed change is cheaper than a failed production deploy.

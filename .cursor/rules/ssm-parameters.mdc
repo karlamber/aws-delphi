@@ -1,0 +1,48 @@
+---
+description: SSM Parameter Store stack conventions
+globs: **/ssm_param/terragrunt.hcl
+alwaysApply: false
+---
+
+# SSM Parameter Stacks
+
+## Input shape
+
+```hcl
+inputs = {
+  parameters = [
+    {
+      comp        = "ENV"               # COMP domain - uppercase
+      app_alias   = upper(local.app_alias) # always uppercase here
+      name        = "LOG_LEVEL"         # uppercase, snake-case
+      value       = "INFO"              # placeholder for secrets
+      type        = "String"            # or "SecureString" for secrets
+      description = "Controls logging level for <app>"
+    },
+    # ...
+  ]
+}
+```
+
+## Path format
+
+Resulting parameter path: `/{COMP}/{APP_ALIAS}/{NAME}` (all uppercase). See `naming-conventions.mdc` for `COMP` domains.
+
+## Secrets
+
+- Use `type = "SecureString"` for any sensitive value.
+- Set `value = "WillBeChanged"` (or similar placeholder) in code.
+- The `tf-ssm_param` module uses `lifecycle { ignore_changes = [value] }`, so the real value must be set out-of-band (Console or `aws ssm put-parameter`) and Terraform never sees or rotates it.
+- Never commit real credentials to satisfy the `value` requirement.
+
+## Required fields
+
+Each parameter object must have `comp`, `app_alias`, `name`, `value`, `type`, `description`. Keep `description` informative — it appears in the AWS Console and helps app developers.
+
+## Cross-app references
+
+When an app needs another app's value, reference the existing path (e.g. `/MQ/NYX/MQ_ENDPOINT` published once in the landscape ssm_param stack, consumed by `mercury` and `perseus` ECS services). Do not duplicate the parameter under each app.
+
+## Dependencies
+
+Stacks producing the values referenced (e.g. DDB tables, S3 buckets, RabbitMQ broker) should be declared as `dependency` blocks so plans run in the right order.

@@ -1,0 +1,110 @@
+---
+description: AWS resource naming convention, tagging policy (Landscape, Environment, App_Alias, Tier, Name), SSM parameter paths, and canonical variable names for Terraform/Terragrunt code in this repo.
+globs: **/*.tf,**/*.hcl
+alwaysApply: true
+---
+
+# AWS Resource Naming & Tagging
+
+## 1. The canonical name formula
+
+Every AWS resource name in this repo is built from this single formula:
+
+```
+{component}-{app_alias|landscape}-{env}-{location}-{detail}{number}
+```
+
+All lowercase. Hyphens between slots. **No separator between `{detail}` and `{number}`** (it's `vm1`, not `vm-1`).
+
+When extra qualifiers are needed (e.g. tier on a subnet, purpose on an IAM policy), append them as additional hyphen-separated slots after `{detail}{number}`.
+
+## 2. Resource scope decides two things at once
+
+The choice between `{app_alias}` and `{landscape}` in slot 2 is driven by the resource's **scope**, and the same choice drives whether the resource gets an `App_Alias` tag:
+
+| Scope | Examples | Slot 2 | `App_Alias` tag? |
+| --- | --- | --- | --- |
+| **Application-scoped** — belongs to a specific workload | ECS cluster/service/task, RDS, Lambda, S3 bucket, API GW, CloudFront, the `bennu` dev VM | `{app_alias}` (e.g. `bennu`, `mercury`, `hubble`) | **Yes**, `App_Alias = <app_alias>` |
+| **Landscape-scoped** — shared, account-wide, or generic infra | VPC, subnets, route tables, NAT, IGW, Cognito user pool, CloudTrail, shared SSM bastion, landscape-wide IAM/KMS, CloudWatch landscape role | `{landscape}` (e.g. `argo`, `nyx`) | **No** |
+
+When in doubt, ask: *"Is this resource useful to exactly one app, or to the whole landscape?"*
+
+## 3. Slot definitions
+
+| Slot | Definition |
+| --- | --- |
+| `{component}` | Fixed by AWS resource type. Examples: `vpc`, `subnet`, `secgrp`, `alb`, `ecs`, `ec2`, `vol`, `lambda`, `s3`, `sqs`, `role`, `policy`, `profile`, `inline`, `cognito`, `cloudfront`, `cloudtrail`, `subnet_group`, `pg`. |
+| `{app_alias}` | Short app identifier, e.g. `mercury`, `perseus`, `hubble`, `bennu`, `argus`. Variable: `var.app_alias`. |
+| `{landscape}` | Landscape identifier, e.g. `argo`, `nyx`, `penelope`. Variable: `var.landscape` — sourced from `account.hcl` by the root terragrunt. |
+| `{env}` | `poc`, `sb` (sandbox), `dev`, `tst`, `trn`, or **omitted entirely** for PROD. Variable: `var.env`. |
+| `{location}` | Region short code (`ue1` for `us-east-1`, `uw2` for `us-west-2`) for region-scoped resources; AZ ID (`use1-az1`) for AZ-scoped resources like subnets. Variable: `var.region_short`. **`region_short` is built by taking the first letter of each region segment** (`us-east-1` → `ue1`). |
+| `{detail}` | Resource role: `vm`, `bastion`, `webserver`, `worker`, `build_agent`, `cluster`, `service`, `inbox`, `inputs`, `schedule_file_pickup`, `ecs_task`, `cloudwatch_logging`, etc. Underscores are allowed (the convention says so explicitly). |
+| `{number}` | Instance index when multiple instances of the same `{detail}` exist under the same identity: `1`, `2`, `01`, `02`. **Omit when the resource is a singleton** (one ECS cluster per app, one CloudFront distribution per app, one Cognito user pool per landscape). |
+
+## 4. Per-resource patterns (reference)
+
+These are the patterns in active use. Each row is annotated with its scope; that drives both the slot-2 value and the `App_Alias` tag (see §2).
+
+| Resource | Scope | Pattern | Example |
+| --- | --- | --- | --- |
+| VPC | landscape | `vpc-{landscape}-{env}-{region_short}` | `vpc-nyx-sb-ue1` |
+| Subnet | landscape | `subnet-{landscape}-{env}-{az_id}-{tier}` | `subnet-nyx-sb-use1-az1-private` |
+| Security group (VPC) | landscape | `secgrp-{landscape}-{env}-{region_short}-{tier}` | `secgrp-nyx-sb-ue1-private` |
+| Security group (per-resource) | matches resource | `secgrp-{app\|landscape}-{env}-{region_short}-{detail}{number}` | `secgrp-bennu-poc-ue1-vm1` |
+| ALB | matches resource | `alb-{app\|landscape}-{env}-{region_short}-{detail}` | `alb-nyx-sb-ue1-public` |
+| ECS cluster | **app** | `ecs-{app_alias}-{env}-{region_short}-cluster` | `ecs-mercury-sb-ue1-cluster` |
+| ECS service | app | `ecs-{app_alias}-{env}-{region_short}-service` | `ecs-mercury-sb-ue1-service` |
+| ECS task def | app | `ecs-{app_alias}-{env}-{region_short}-service-task` | `ecs-mercury-sb-ue1-service-task` |
+| EC2 instance | matches resource | `ec2-{app\|landscape}-{env}-{region_short}-{detail}{number}` | `ec2-bennu-poc-ue1-vm1`, `ec2-argo-poc-ue1-bastion1` |
+| EBS volume | matches resource | `vol-{app\|landscape}-{env}-{region_short}-{detail}{number}` | `vol-bennu-poc-ue1-root1`, `vol-bennu-poc-ue1-docker1` |
+| S3 bucket | app | `s3-{app_alias}-{env}-{region_short}-{detail}` | `s3-mercury-sb-ue1-inputs` |
+| SQS queue | app | `sqs-{app_alias}-{env}-{region_short}-{detail}` | `sqs-mercury-sb-ue1-inbox` |
+| Lambda | app | `lambda-{app_alias}-{env}-{region_short}-{detail}` | `lambda-hubble-sb-ue1-schedule_file_pickup` |
+| IAM role | matches resource | `role-{app\|landscape}-{env}-{region_short}-{purpose}` | `role-mercury-sb-ue1-ecs_task`, `role-argo-sb-ue1-cloudwatch_logging` |
+| IAM policy | matches resource | `policy-{service}-{app\|landscape}-{env}-{region_short}-{purpose}` | `policy-task-mercury-sb-ue1-execution`, `policy-logs-nyx-sb-ue1-flow-logs` |
+| Cognito user pool | landscape | `cognito-{landscape}-{env}-{region_short}-{pool}` | `cognito-nyx-sb-ue1-users` |
+| CloudFront WAF | app | `cloudfront-{app_alias}-{env}-{region_short}-waf` | `cloudfront-mercury-sb-ue1-waf` |
+| CloudTrail | landscape | `cloudtrail-{landscape}-{env}-{region_short}` | `cloudtrail-nyx-sb-ue1` |
+| CloudWatch log group | derived | `/aws/{service}/{resource_name}` | `/aws/ecs/ecs-mercury-sb-ue1-service`, `/aws/ssm/bennu-poc-ue1-vm1/sessions` |
+
+When introducing a **new** resource type, derive the name from the formula in §1 and the scope rule in §2 — don't wait for the table above to be updated.
+
+## 5. Tagging
+
+The root `terragrunt.hcl` already injects these on every resource via the provider's `default_tags`:
+
+- `Landscape`
+- `Environment`
+- `ProvisionedBy`
+
+A module **must not** redeclare these on individual resources (it duplicates and creates drift). Module-added tags are layered on top:
+
+| Tag | When to add | Value |
+| --- | --- | --- |
+| `App_Alias` | **App-scoped resources only** (see §2). Never add on landscape-scoped resources. | `var.app_alias` |
+| `Name` | Every resource that supports tags. Required because the AWS console & several resource types (EBS volumes, ENIs, snapshots, …) only show a friendly identifier through this tag. | The full resource name from §1. |
+| `Tier` | Network resources that have a tier concept (subnets, per-tier SGs). | `Public`, `Private`, or `Isolated`. |
+| `AutoShutdownSchedule` | Resources that participate in a Lambda-driven shutdown schedule. | Cron-style schedule string. |
+
+Anything else should only be added when it carries information not already in `Name` or the default tags. Don't duplicate the defaults.
+
+## 6. SSM parameter paths
+
+SSM parameters use a different shape from AWS resource names:
+
+```
+/{COMP}/{APP_ALIAS}/{NAME}
+```
+
+- `COMP`, `APP_ALIAS`, `NAME` are **uppercase**.
+- `COMP` is the component domain: `ENV`, `MQ`, `DDB`, `S3`, `ECS`, `VPC`, `RDS`, `COGNITO`.
+- Examples: `/ENV/MERCURY/LOG_LEVEL`, `/MQ/NYX/MQ_ENDPOINT`, `/DDB/MERCURY/INBOX_TABLE_NAME`.
+
+(Landscape-scoped SSM params use the landscape name in the `{APP_ALIAS}` slot — same scope rule, uppercased.)
+
+## 7. Variables
+
+- `snake_case` for variable names, locals, and most input keys.
+- Canonical identifiers — reuse, don't invent synonyms: `app_alias`, `landscape`, `env`, `region`, `region_short`, `detail`, `number`.
+- `app_alias` should default to `null` on modules that may serve both app- and landscape-scoped use cases (e.g. `tf-ec2-vm`). The module then decides slot-2 and `App_Alias` tagging via `coalesce(var.app_alias, var.landscape)` and `var.app_alias == null ? {} : { App_Alias = var.app_alias }`.
+- On modules that only make sense app-scoped (e.g. `tf-lambda`, `tf-ecs`, `tf-s3`), `app_alias` is required.
