@@ -12,7 +12,7 @@ Sibling landscapes that build the same Argus stacks with different glue:
 |---|---|
 | **`aws-delphi`** (this repo) | Terragrunt |
 | [`aws-kos`](../aws-kos) | Python orchestrator + Terraform |
-| [`aws-delos`](../aws-delos) | Plain Terraform only (you `cd` into each folder yourself) |
+| [`aws-delos`](../aws-delos) | Plain Terraform only (`live/<env>/…`) |
 
 ---
 
@@ -45,8 +45,8 @@ Terraform still creates and changes AWS resources. Terragrunt handles shared con
 
 | File | Purpose |
 |---|---|
-| `aws-delphi-dev/account.hcl` (gitignored; copy from `account.hcl.example`) | Shared values: AWS account ID, DNS role, GitHub OIDC subjects, artifact bucket |
-| `aws-delphi-dev/us-east-1/region.hcl` | AWS region |
+| `aws-delphi-dev/account.hcl` or `aws-delphi-prod/account.hcl` (gitignored; copy from `account.hcl.example`) | Shared values: AWS account ID, DNS role, GitHub OIDC subjects, artifact bucket |
+| `aws-delphi-*/us-east-1/region.hcl` | AWS region |
 | `root.hcl` | Provider generation, state backend, shared input merge |
 | Each stack’s `terragrunt.hcl` | Module source, dependencies, stack-specific inputs (VPC CIDRs, Cognito URLs, Lambda env, …) |
 | Modules under `tf-modules/` | Reusable Terraform for this landscape |
@@ -86,13 +86,16 @@ Reusable modules live under `tf-modules/` in both repos. The application name is
 aws-delphi/
 ├── root.hcl                    # shared provider, backend, and inputs
 ├── tf-modules/                 # shared Terraform modules for this landscape
-└── aws-delphi-dev/             # member account folder (env=dev)
-    ├── account.hcl.example     # committed placeholders (safe to publish)
-    ├── account.hcl             # gitignored — your real account IDs and OIDC subjects
-    └── us-east-1/
-        ├── region.hcl
-        ├── vpc, cognito, cloudwatch_logging, github_oidc_*
-        └── argus/              # rds, lambda, apigw, tls, cloudfront, dns, ssm, iam
+├── aws-delphi-dev/             # member account folder (env=dev)
+│   ├── account.hcl.example     # committed placeholders (safe to publish)
+│   ├── account.hcl             # gitignored — your real account IDs and OIDC subjects
+│   └── us-east-1/
+│       ├── region.hcl
+│       ├── vpc, cognito, cloudwatch_logging, github_oidc_*
+│       └── argus/              # rds, lambda, apigw, tls, cloudfront, dns, ssm, iam
+└── aws-delphi-prod/            # member account folder (env=prod) — same stack layout
+    ├── account.hcl.example
+    └── us-east-1/…
 ```
 
 Each stack folder contains a `terragrunt.hcl`. Terragrunt generates provider/backend files into that folder at run time.
@@ -118,7 +121,7 @@ Always `cd` into the folder that contains `terragrunt.hcl`. Confirm the AWS prof
 
 ### Promotion order
 
-When more environments exist: `dev` → `tst` → `prod`. Plan each stack independently; do not skip environments.
+`dev` → `tst` → `prod`. Use the matching account folder (`aws-delphi-dev`, then `aws-delphi-prod`). Plan each stack independently; do not skip environments.
 
 ---
 
@@ -177,4 +180,11 @@ Do not commit real AWS account IDs, GitHub OIDC subject IDs, or database/SSM pas
 
 ## Network
 
-This landscape uses IP range `10.0.0.0/20`. The us-east-1 VPC CIDR is `10.0.0.0/21` (set in `aws-delphi-dev/us-east-1/vpc/terragrunt.hcl`). That block does not overlap Kos’s `10.0.16.0/20`.
+Each env account gets its own `/20` (no CIDR overlap between dev and prod):
+
+| Account folder | Account block | us-east-1 VPC | Set in |
+|---|---|---|---|
+| `aws-delphi-dev` | `10.0.0.0/20` | `10.0.0.0/21` | `aws-delphi-dev/us-east-1/vpc/terragrunt.hcl` |
+| `aws-delphi-prod` | `10.0.48.0/20` | `10.0.48.0/21` | `aws-delphi-prod/us-east-1/vpc/terragrunt.hcl` |
+
+These blocks do not overlap Kos (`10.0.16.0/20` dev, `10.0.64.0/20` prod) or Delos (`10.0.32.0/20` dev, `10.0.80.0/20` prod).

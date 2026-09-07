@@ -1,0 +1,19 @@
+locals {
+  env          = "prod"
+  account_name = "aws-delphi-prod"
+  account_id   = "000000000000"
+  aws_profile  = "aws-delphi-prod"
+  landscape    = "delphi"
+
+  route53_account_id   = "000000000000"
+  dns_manager_role_arn = "arn:aws:iam::000000000000:role/role-EXAMPLE-root-ue1-dns_manager"
+
+  # Shared Lambda zip bucket (mgmt account). Override in local account.hcl.
+  artifact_bucket = "s3-EXAMPLE-mgmt-ue1-shared-lambda"
+
+  # GitHub OIDC subjects — use org/repo names for public samples; real node IDs stay in local account.hcl only.
+  oidc_subjects = [
+    "EXAMPLE_GITHUB_ORG/argus-api-lambda:*",
+    "EXAMPLE_GITHUB_ORG/argus-front-end:*",
+  ]
+}
