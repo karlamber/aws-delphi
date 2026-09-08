@@ -149,6 +149,47 @@ CREATE TRIGGER tr_landscape_set_updated_at
 ALTER TABLE argus.landscape OWNER TO postgres;
 
 -- ---------------------------------------------------------------------------
+-- argus.hosting_provider (lookup for landscape_environment.hosting_provider)
+-- ---------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS argus.hosting_provider (
+	id bigint GENERATED ALWAYS AS IDENTITY NOT NULL,
+	code text NOT NULL,
+	display_name text NOT NULL,
+	description text NULL,
+	is_active bool DEFAULT true NOT NULL,
+	created_at timestamptz DEFAULT now() NOT NULL,
+	updated_at timestamptz DEFAULT now() NOT NULL,
+	created_by text NULL,
+	updated_by text NULL,
+	deleted_by text NULL,
+	CONSTRAINT hosting_provider_pkey PRIMARY KEY (id),
+	CONSTRAINT uq_hosting_provider_code UNIQUE (code),
+	CONSTRAINT chk_hosting_provider_code_not_blank CHECK (btrim(code) <> ''),
+	CONSTRAINT chk_hosting_provider_display_name_not_blank CHECK (
+		btrim(display_name) <> ''
+	)
+);
+CREATE INDEX IF NOT EXISTS ix_hosting_provider_is_active
+	ON argus.hosting_provider USING btree (is_active);
+
+DROP TRIGGER IF EXISTS tr_hosting_provider_set_updated_at ON argus.hosting_provider;
+CREATE TRIGGER tr_hosting_provider_set_updated_at
+	BEFORE UPDATE ON argus.hosting_provider
+	FOR EACH ROW
+	EXECUTE FUNCTION argus.set_updated_at();
+
+ALTER TABLE argus.hosting_provider OWNER TO postgres;
+
+INSERT INTO argus.hosting_provider (code, display_name, description)
+VALUES
+	('AWS', 'AWS', 'Amazon Web Services'),
+	('AZURE', 'Azure', 'Microsoft Azure'),
+	('GCP', 'GCP', 'Google Cloud Platform'),
+	('ONPREM', 'OnPrem', 'On-premises / private data center')
+ON CONFLICT (code) DO NOTHING;
+
+-- ---------------------------------------------------------------------------
 -- argus.landscape_environment
 -- ---------------------------------------------------------------------------
 
@@ -173,9 +214,6 @@ CREATE TABLE IF NOT EXISTS argus.landscape_environment (
 	CONSTRAINT chk_landscape_environment_account_number_not_blank CHECK (
 		provider_account_number IS NULL OR btrim(provider_account_number) <> ''
 	),
-	CONSTRAINT chk_landscape_environment_hosting_provider CHECK (
-		hosting_provider IN ('AWS', 'AZURE')
-	),
 	CONSTRAINT chk_landscape_environment_name_not_blank CHECK (
 		btrim(environment_name) <> ''
 	),
@@ -185,7 +223,9 @@ CREATE TABLE IF NOT EXISTS argus.landscape_environment (
 		hosting_provider, provider_account_number
 	),
 	CONSTRAINT fk_landscape_environment_landscape FOREIGN KEY (landscape_id)
-		REFERENCES argus.landscape(id) ON DELETE CASCADE
+		REFERENCES argus.landscape(id) ON DELETE CASCADE,
+	CONSTRAINT fk_landscape_environment_hosting_provider FOREIGN KEY (hosting_provider)
+		REFERENCES argus.hosting_provider(code) ON UPDATE CASCADE ON DELETE RESTRICT
 );
 CREATE INDEX IF NOT EXISTS ix_landscape_environment_is_active
 	ON argus.landscape_environment USING btree (is_active);
@@ -273,7 +313,8 @@ ALTER TABLE argus.schema_migrations OWNER TO postgres;
 
 INSERT INTO argus.schema_migrations (version) VALUES
 	('20260524120000_add_audit_user_columns'),
-	('20260602143600_add_application_compliance_column')
+	('20260602143600_add_application_compliance_column'),
+	('20260908150000_hosting_provider_lookup')
 ON CONFLICT (version) DO NOTHING;
 
 -- ---------------------------------------------------------------------------
