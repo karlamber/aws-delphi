@@ -15,7 +15,11 @@ output "saml_provider_names" {
 
 output "saml_provider_metadata_urls" {
   description = "Map of application names to their SAML metadata URLs"
-  value = { for app, provider in aws_cognito_identity_provider.saml_providers : app => provider.provider_details["MetadataURL"] }
+  # provider_details is null during plan for a new IdP; use try() so plan can complete.
+  value = {
+    for app, provider in aws_cognito_identity_provider.saml_providers :
+    app => try(provider.provider_details["MetadataURL"], null)
+  }
 }
 
 output "app_client_callback_urls" {
