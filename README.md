@@ -145,6 +145,10 @@ Always `cd` into the folder that contains `terragrunt.hcl`. Confirm the AWS prof
    ```
 6. Put secrets into SSM Parameter Store yourself (SecureString). Do not put real passwords in Terragrunt/HCL or git. The `argus/ssm_param` stack uses a placeholder (`<SEED_OUTSIDE_TERRAFORM>`); seed the live value outside Terraform — the module ignores value drift.
 7. Plan and apply one stack at a time, starting with stacks that have no dependencies (for example `cloudwatch_logging`, then `vpc`, then Argus stacks).
+8. After the RDS stack exists, bootstrap Argus schema: run
+   `aws-delphi-dev/us-east-1/argus/rds/initial-config.sql` as `postgres` (RDS Query
+   Editor). Then set `argus_lambda` password to match Lambda `PGPASSWORD`. Later
+   schema changes live in `argus-api-lambda` — see [Argus database schema](#argus-database-schema).
 
 ---
 
@@ -174,6 +178,25 @@ Do not commit real AWS account IDs, GitHub OIDC subject IDs, or database/SSM pas
 |---|---|
 | `argus-front-end` | Vue SPA |
 | `argus-api-lambda` | Node.js API |
+
+## Argus database schema
+
+RDS Terraform creates an empty Aurora PostgreSQL database (`argus`). It does
+**not** create tables. Schema is owned by `argus-api-lambda` and applied in two
+ways:
+
+| When | What to run |
+|---|---|
+| Brand-new cluster | `us-east-1/argus/rds/initial-config.sql` as master user `postgres` (RDS Query Editor). Then set `argus_lambda` password to match Lambda `PGPASSWORD`. |
+| Cluster that already has tables | Do **not** re-run `initial-config.sql` expecting ALTERs — it will not change existing tables. Apply `argus-api-lambda/db/migrations/` (`npm run migrate`, or paste the new file in Query Editor and stamp `argus.schema_migrations`). |
+
+Apply SQL on the **target** environment **before** deploying Lambda code that
+needs the new shape. Keep the `dev` and `prod` copies of `initial-config.sql` in
+lockstep; after each migration, paste `npm run migrate:stamps` from
+`argus-api-lambda` into the `schema_migrations` INSERT.
+
+Promotion: apply schema in `dev`, then `prod`. Same order as application
+deploys. Never skip.
 
 ---
 

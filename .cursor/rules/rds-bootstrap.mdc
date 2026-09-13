@@ -1,0 +1,21 @@
+---
+description: Argus RDS bootstrap snapshot vs later migrations (do not ALTER via initial-config.sql)
+globs: "**/rds/initial-config.sql"
+alwaysApply: false
+---
+
+# Argus RDS bootstrap
+
+`argus/rds/initial-config.sql` is a **new-cluster snapshot**. It does not ALTER
+existing tables. Re-running it will not evolve a live database.
+
+Schema changes start in `argus-api-lambda/db/migrations/`. Then:
+
+1. Fold the end-state DDL into **this** file (every env copy).
+2. Replace the `INSERT INTO argus.schema_migrations` block with the output of
+   `npm run migrate:stamps` in `argus-api-lambda`.
+3. On an existing cluster, apply the new migration (Query Editor or
+   `npm run migrate`) **before** deploying Lambda code that needs it.
+
+Keep `aws-delphi-dev` and `aws-delphi-prod` copies in lockstep. `aws-kos` has
+the same snapshot files — update those in that repo, not from here.

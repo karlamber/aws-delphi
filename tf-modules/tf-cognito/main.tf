@@ -61,7 +61,8 @@ resource "aws_cognito_user_pool_client" "app_clients" {
     refresh_token = try(var.token_configuration[each.key].token_validity_units.refresh_token, "days")
   }
 
-  depends_on = [aws_cognito_identity_provider.saml_providers["<IDP_NAME>"]]
+  # Ensure SAML IdP exists before the app client references it in supported_identity_providers.
+  depends_on = [aws_cognito_identity_provider.saml_providers]
 }
 
 resource "aws_cognito_identity_provider" "saml_providers" {

@@ -4,8 +4,8 @@
 -- stack: database_name = "argus", engine aurora-postgresql 17.4).
 --
 -- Lambda (`argus-api-lambda`) connects as `argus_lambda` with
--- search_path=argus (see aws-delphi-dev/.../lambda-argus_api and
--- src/infrastructure/db/pool.ts).
+-- search_path=argus (see the Argus lambda stack and
+-- argus-api-lambda/src/infrastructure/db/pool.ts).
 --
 -- PASSWORD: replace CHANGE_ME in this file before the first run, or immediately
 -- afterward:
@@ -14,9 +14,15 @@
 -- existing role's password.
 --
 -- DDL vs DML: tables stay owned by postgres. The Lambda role is DML-only.
--- Apply later files in argus-api-lambda/db/migrations as postgres (or another
--- owner). The two migrations already baked into this schema are recorded in
--- argus.schema_migrations so `npm run migrate` is a no-op on a fresh cluster.
+-- This file is a snapshot for a *new* cluster only. It does not ALTER existing
+-- tables — re-running it on a live database will not apply later schema changes.
+--
+-- After each schema change in argus-api-lambda:
+--   1. Add db/migrations/<timestamp>_<name>.sql
+--   2. Fold the end-state DDL into this snapshot (every env copy)
+--   3. Replace the schema_migrations INSERT with `npm run migrate:stamps`
+-- Existing clusters: run `npm run migrate` (or apply the new SQL in Query Editor
+-- and insert the version). Do not rely on re-running this file.
 --
 -- Idempotent: CREATE IF NOT EXISTS / DO blocks. Does not ALTER existing tables.
 
