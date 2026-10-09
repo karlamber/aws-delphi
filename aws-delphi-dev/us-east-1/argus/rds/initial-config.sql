@@ -1,11 +1,14 @@
--- Argus CMDB — one-time bootstrap for the Aurora PostgreSQL cluster.
+-- easyCMDB — one-time bootstrap for a new Aurora PostgreSQL cluster.
+--
+-- Table DDL and schema_migrations stamps match easycmdb-api/db/bootstrap.sql.
+-- This copy also creates the argus_app and argus_lambda roles. Edit the
+-- canonical schema in easycmdb-api/db/bootstrap.sql, then fold the same end
+-- state into every env copy of this file.
 --
 -- Connect as master user `postgres` to database `argus` (created by the RDS
--- stack: database_name = "argus", engine aurora-postgresql 17.4).
+-- stack: database_name = "argus").
 --
--- Lambda (`argus-api-lambda`) connects as `argus_lambda` with
--- search_path=argus (see the Argus lambda stack and
--- argus-api-lambda/src/infrastructure/db/pool.ts).
+-- The Lambda connects as `argus_lambda` with search_path=argus.
 --
 -- PASSWORD: replace CHANGE_ME in this file before the first run, or immediately
 -- afterward:
@@ -17,9 +20,9 @@
 -- This file is a snapshot for a *new* cluster only. It does not ALTER existing
 -- tables — re-running it on a live database will not apply later schema changes.
 --
--- After each schema change in argus-api-lambda:
+-- After each schema change in easycmdb-api:
 --   1. Add db/migrations/<timestamp>_<name>.sql
---   2. Fold the end-state DDL into this snapshot (every env copy)
+--   2. Fold the end-state DDL into db/bootstrap.sql and into this snapshot
 --   3. Replace the schema_migrations INSERT with `npm run migrate:stamps`
 -- Existing clusters: run `npm run migrate` (or apply the new SQL in Query Editor
 -- and insert the version). Do not rely on re-running this file.

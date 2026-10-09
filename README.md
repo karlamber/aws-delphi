@@ -189,11 +189,11 @@ ways:
 
 | When | What to run |
 |---|---|
-| Brand-new cluster | `us-east-1/argus/rds/initial-config.sql` as master user `postgres` (RDS Query Editor). Then set `argus_lambda` password to match Lambda `PGPASSWORD`. |
+| Brand-new cluster | `us-east-1/argus/rds/initial-config.sql` as master user `postgres` (RDS Query Editor). Same schema as [easycmdb-api/db/bootstrap.sql](https://github.com/karlamber/easycmdb-api/blob/main/db/bootstrap.sql), plus the `argus_lambda` role. Then set that role's password to match Lambda `PGPASSWORD`. |
 | Cluster that already has tables | Do **not** re-run `initial-config.sql` expecting ALTERs — it will not change existing tables. Apply `easycmdb-api/db/migrations/` (`npm run migrate`, or paste the new file in Query Editor and stamp `argus.schema_migrations`). |
 
 Apply SQL on the **target** environment **before** deploying Lambda code that
-needs the new shape. Keep the `dev` and `prod` copies of `initial-config.sql` in
+needs the new shape. Keep `easycmdb-api/db/bootstrap.sql` and the `dev` and `prod` copies of `initial-config.sql` in
 lockstep; after each migration, paste `npm run migrate:stamps` from
 `easycmdb-api` into the `schema_migrations` INSERT.
 
