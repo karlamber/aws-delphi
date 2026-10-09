@@ -45,7 +45,7 @@ inputs = {
 
   app_alias   = local.app_alias
   detail      = "api"
-  description = "HTTP API for Argus SPA (/api) -> argus-api-lambda"
+  description = "HTTP API for the easyCMDB SPA (/api) -> easycmdb-api"
 
   lambda_function_name = dependency.argus_api_lambda.outputs.lambda_function_name
   lambda_invoke_arn    = dependency.argus_api_lambda.outputs.lambda_function_invoke_arn

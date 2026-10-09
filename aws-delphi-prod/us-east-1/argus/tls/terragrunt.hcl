@@ -7,7 +7,7 @@ terraform {
   }
 }
 
-# Assume the 59madison DNS manager role to write ACM validation records
+# Assume the management-account DNS manager role to write ACM validation records
 generate "provider_route53" {
   path      = "provider_route53.tf"
   if_exists = "overwrite_terragrunt"

@@ -12,7 +12,7 @@ Use this repo to see a Terragrunt-driven layout. Compare with Kos or Delos if yo
 
 Hostnames in this lab use the **fifty9** domain (for example `argus-dev.fifty9.net`). Public DNS for `fifty9.net` and the cross-account DNS role live in the management shared-services account — not in this repo.
 
-The repo is meant as a learnable / portfolio example of multi-stack AWS infrastructure — keep it private while it contains real account details; publish later only after placeholders and gitignore are solid. Real account IDs and OIDC subjects stay in a gitignored `account.hcl`.
+Real account IDs and OIDC subjects stay in a gitignored `account.hcl`. Committed files use placeholders.
 
 ---
 
@@ -134,7 +134,7 @@ Always `cd` into the folder that contains `terragrunt.hcl`. Confirm the AWS prof
    # artifact_bucket, oidc_subjects
    ```
 3. If this environment needs DNS or shared Lambda artifacts, grant the member account access in the management shared-services account (`route53-dnsmgr`, shared Lambda bucket).
-4. Sign in and confirm you are in the right account:
+4. For the Lambda artifact copy hook, export `ARTIFACT_AWS_PROFILE` set to a profile that can read the shared artifact bucket. Sign in and confirm you are in the right account:
    ```bash
    aws sso login --profile aws-delphi-dev
    aws sts get-caller-identity --profile aws-delphi-dev
@@ -148,7 +148,7 @@ Always `cd` into the folder that contains `terragrunt.hcl`. Confirm the AWS prof
 8. After the RDS stack exists, bootstrap Argus schema: run
    `aws-delphi-dev/us-east-1/argus/rds/initial-config.sql` as `postgres` (RDS Query
    Editor). Then set `argus_lambda` password to match Lambda `PGPASSWORD`. Later
-   schema changes live in `argus-api-lambda` — see [Argus database schema](#argus-database-schema).
+   schema changes live in [easycmdb-api](https://github.com/karlamber/easycmdb-api) — see [Argus database schema](#argus-database-schema).
 
 ---
 
@@ -174,26 +174,28 @@ Do not commit real AWS account IDs, GitHub OIDC subject IDs, or database/SSM pas
 
 ## Related application repos
 
+The product name is easyCMDB. The infrastructure alias stays `argus`.
+
 | Repo | Purpose |
 |---|---|
-| `argus-front-end` | Vue SPA |
-| `argus-api-lambda` | Node.js API |
+| [easycmdb-web](https://github.com/karlamber/easycmdb-web) | React SPA |
+| [easycmdb-api](https://github.com/karlamber/easycmdb-api) | TypeScript Lambda API |
 
 ## Argus database schema
 
 RDS Terraform creates an empty Aurora PostgreSQL database (`argus`). It does
-**not** create tables. Schema is owned by `argus-api-lambda` and applied in two
+**not** create tables. Schema is owned by [easycmdb-api](https://github.com/karlamber/easycmdb-api) and applied in two
 ways:
 
 | When | What to run |
 |---|---|
 | Brand-new cluster | `us-east-1/argus/rds/initial-config.sql` as master user `postgres` (RDS Query Editor). Then set `argus_lambda` password to match Lambda `PGPASSWORD`. |
-| Cluster that already has tables | Do **not** re-run `initial-config.sql` expecting ALTERs — it will not change existing tables. Apply `argus-api-lambda/db/migrations/` (`npm run migrate`, or paste the new file in Query Editor and stamp `argus.schema_migrations`). |
+| Cluster that already has tables | Do **not** re-run `initial-config.sql` expecting ALTERs — it will not change existing tables. Apply `easycmdb-api/db/migrations/` (`npm run migrate`, or paste the new file in Query Editor and stamp `argus.schema_migrations`). |
 
 Apply SQL on the **target** environment **before** deploying Lambda code that
 needs the new shape. Keep the `dev` and `prod` copies of `initial-config.sql` in
 lockstep; after each migration, paste `npm run migrate:stamps` from
-`argus-api-lambda` into the `schema_migrations` INSERT.
+`easycmdb-api` into the `schema_migrations` INSERT.
 
 Promotion: apply schema in `dev`, then `prod`. Same order as application
 deploys. Never skip.
@@ -210,3 +212,4 @@ Each env account gets its own `/20` (no CIDR overlap between dev and prod):
 | `aws-delphi-prod` | `10.0.48.0/20` | `10.0.48.0/21` | `aws-delphi-prod/us-east-1/vpc/terragrunt.hcl` |
 
 These blocks do not overlap Kos (`10.0.16.0/20` dev, `10.0.64.0/20` prod) or Delos (`10.0.32.0/20` dev, `10.0.80.0/20` prod).
+AWS stays in `10.0.0.0/11`; Azure VNets use `10.32.0.0/11`.

@@ -13,7 +13,7 @@ locals {
 
   # GitHub OIDC subjects — use org/repo names for public samples; real node IDs stay in local account.hcl only.
   oidc_subjects = [
-    "EXAMPLE_GITHUB_ORG/argus-api-lambda:*",
-    "EXAMPLE_GITHUB_ORG/argus-front-end:*",
+    "EXAMPLE_GITHUB_ORG/easycmdb-api:*",
+    "EXAMPLE_GITHUB_ORG/easycmdb-web:*",
   ]
 }

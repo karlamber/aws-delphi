@@ -14,7 +14,11 @@ terraform {
       SOURCE_KEY="test-lambda.zip"
       DEST_BUCKET="${include.inputs.artifact_bucket}"
       DEST_KEY="${local.artifact_key}"
-      AWS_PROFILE="59madison"
+      AWS_PROFILE="${get_env("ARTIFACT_AWS_PROFILE", "")}"
+      if [ -z "$AWS_PROFILE" ]; then
+        echo "ERROR: set ARTIFACT_AWS_PROFILE to a profile that can read the artifact bucket"
+        exit 1
+      fi
 
       echo "Checking if source artifact exists..."
       if ! aws --profile $AWS_PROFILE s3api head-object --bucket "$SOURCE_BUCKET" --key "$SOURCE_KEY" >/dev/null 2>&1; then
@@ -43,8 +47,8 @@ include {
 locals {
   app_alias   = "argus"
   detail      = "argus_api"
-  description = "Argus CMDB API Lambda (argus-api-lambda)"
-  # Artifact bucket/key — align with argus-api-lambda deploy workflow / .env.deploy.example
+  description = "easyCMDB API Lambda (easycmdb-api)"
+  # Artifact bucket/key — align with the easycmdb-api deploy workflow / .env.deploy.example
   artifact_bucket = include.inputs.artifact_bucket
   artifact_key    = "${local.app_alias}/${include.inputs.env}/${local.app_alias}-${local.detail}.zip"
 }
