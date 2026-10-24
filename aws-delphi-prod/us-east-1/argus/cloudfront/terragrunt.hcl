@@ -119,5 +119,6 @@ inputs = {
     locations        = ["US"]
   }
 
-  enable_default_waf = true
+  # WAF is a paid web ACL. Security headers on the distribution are the free control.
+  enable_default_waf = false
 }

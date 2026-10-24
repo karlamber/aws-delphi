@@ -138,7 +138,6 @@
                     "check_ids": [
                         "CKV_AWS_252",
                         "CKV_AWS_35",
-                        "CKV_AWS_36",
                         "CKV2_AWS_10"
                     ]
                 },

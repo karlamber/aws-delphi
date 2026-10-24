@@ -23,9 +23,3 @@ misconfigurations:
     paths:
       - tf-modules/tf-vpc/main.tf
     statement: Public and private security groups allow outbound internet. Isolated subnets do not.
-
-  # Known gap in a file that already exists. The same finding in a new file still fails.
-  - id: AWS-0016
-    paths:
-      - tf-modules/tf-vpc/main.tf
-    statement: Known gap. CloudTrail log-file validation is not enabled yet.

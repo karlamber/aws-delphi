@@ -13,6 +13,8 @@ include {
 }
 
 inputs = {
+  mfa_configuration = "OPTIONAL"
+
   user_pools = {
     employees = { detail = "employees" }
   }

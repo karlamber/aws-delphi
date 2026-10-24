@@ -75,6 +75,17 @@ variable "custom_sign_in_attributes" {
   default = {}
 }
 
+variable "mfa_configuration" {
+  description = "Cognito MFA mode: OFF, OPTIONAL, or ON. Null leaves the pool unchanged. OPTIONAL uses a free software token and does not lock out password users."
+  type        = string
+  default     = null
+
+  validation {
+    condition     = var.mfa_configuration == null || contains(["OFF", "OPTIONAL", "ON"], var.mfa_configuration)
+    error_message = "mfa_configuration must be OFF, OPTIONAL, ON, or null."
+  }
+}
+
 variable "token_configuration" {
   description = "Token expiration configuration for user pool clients"
   type = map(object({
