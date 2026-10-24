@@ -1,5 +1,6 @@
 locals {
-  base_name         = join("-", [var.landscape, var.env, var.region_short])
+  base_name       = join("-", [var.landscape, var.env, var.region_short])
+  cloudtrail_name = "cloudtrail-${var.landscape}-${var.env}-${var.region_short}"
 }
 
 # Regional AZs only (exclude Local Zones / Wavelength, which cannot host normal subnets)
@@ -14,11 +15,22 @@ data "aws_availability_zones" "available" {
 
 # Create the main VPC
 resource "aws_vpc" "main" {
-  cidr_block = var.vpc_cidr
-  enable_dns_support = true
+  cidr_block           = var.vpc_cidr
+  enable_dns_support   = true
   enable_dns_hostnames = true
   tags = {
-    Name        = "vpc-${local.base_name}"
+    Name      = "vpc-${local.base_name}"
+    Landscape = var.landscape
+  }
+}
+
+# Adopt the VPC default security group and remove its allow-all rules.
+# Workloads use the named tier groups. RDS uses isolated; Lambda uses private.
+resource "aws_default_security_group" "default" {
+  vpc_id = aws_vpc.main.id
+
+  tags = {
+    Name      = "secgrp-${local.base_name}-default"
     Landscape = var.landscape
   }
 }
@@ -85,8 +97,8 @@ resource "aws_subnet" "isolated" {
 
 # Security Group for Public Subnets (without cross-references)
 resource "aws_security_group" "public" {
-  vpc_id = aws_vpc.main.id
-  name   = "secgrp-${local.base_name}-public"
+  vpc_id      = aws_vpc.main.id
+  name        = "secgrp-${local.base_name}-public"
   description = "Security Group for public tier subnets"
 
   egress {
@@ -97,15 +109,15 @@ resource "aws_security_group" "public" {
   }
 
   tags = {
-    Name   = "secgrp-${local.base_name}-public"
+    Name = "secgrp-${local.base_name}-public"
     Tier = "Public"
   }
 }
 
 # Security Group for Private Subnets (without cross-references)
 resource "aws_security_group" "private" {
-  vpc_id = aws_vpc.main.id
-  name   = "secgrp-${local.base_name}-private"
+  vpc_id      = aws_vpc.main.id
+  name        = "secgrp-${local.base_name}-private"
   description = "Security Group for private tier subnets"
 
   egress {
@@ -116,68 +128,68 @@ resource "aws_security_group" "private" {
   }
 
   tags = {
-    Name   = "secgrp-${local.base_name}-private"
+    Name = "secgrp-${local.base_name}-private"
     Tier = "Private"
   }
 }
 
 # Security Group for Isolated Subnets (without cross-references)
 resource "aws_security_group" "isolated" {
-  vpc_id = aws_vpc.main.id
-  name   = "secgrp-${local.base_name}-isolated"
+  vpc_id      = aws_vpc.main.id
+  name        = "secgrp-${local.base_name}-isolated"
   description = "Security Group for isolated tier subnets"
 
   tags = {
-    Name   = "secgrp-${local.base_name}-isolated"
+    Name = "secgrp-${local.base_name}-isolated"
     Tier = "Isolated"
   }
 }
 
 # Ingress rules for Private Security Group
 resource "aws_security_group_rule" "private_from_public" {
-  type              = "ingress"
-  from_port         = 0
-  to_port           = 0
-  protocol          = "-1"
-  security_group_id = aws_security_group.private.id
+  type                     = "ingress"
+  from_port                = 0
+  to_port                  = 0
+  protocol                 = "-1"
+  security_group_id        = aws_security_group.private.id
   source_security_group_id = aws_security_group.public.id
 }
 
 resource "aws_security_group_rule" "private_from_isolated" {
-  type              = "ingress"
-  from_port         = 0
-  to_port           = 0
-  protocol          = "-1"
-  security_group_id = aws_security_group.private.id
+  type                     = "ingress"
+  from_port                = 0
+  to_port                  = 0
+  protocol                 = "-1"
+  security_group_id        = aws_security_group.private.id
   source_security_group_id = aws_security_group.isolated.id
 }
 
 resource "aws_security_group_rule" "private_from_private" {
-  type              = "ingress"
-  from_port         = 0
-  to_port           = 0
-  protocol          = "-1"
-  security_group_id = aws_security_group.private.id
+  type                     = "ingress"
+  from_port                = 0
+  to_port                  = 0
+  protocol                 = "-1"
+  security_group_id        = aws_security_group.private.id
   source_security_group_id = aws_security_group.private.id
 }
 
 # Ingress rules for Isolated Security Group
 resource "aws_security_group_rule" "isolated_from_private" {
-  type              = "ingress"
-  from_port         = 0
-  to_port           = 0
-  protocol          = "-1"
-  security_group_id = aws_security_group.isolated.id
+  type                     = "ingress"
+  from_port                = 0
+  to_port                  = 0
+  protocol                 = "-1"
+  security_group_id        = aws_security_group.isolated.id
   source_security_group_id = aws_security_group.private.id
 }
 
 # Egress rules for Isolated Security Group
 resource "aws_security_group_rule" "isolated_to_private" {
-  type              = "egress"
-  from_port         = 0
-  to_port           = 0
-  protocol          = "-1"
-  security_group_id = aws_security_group.isolated.id
+  type                     = "egress"
+  from_port                = 0
+  to_port                  = 0
+  protocol                 = "-1"
+  security_group_id        = aws_security_group.isolated.id
   source_security_group_id = aws_security_group.private.id
 }
 
@@ -211,11 +223,11 @@ resource "aws_vpc_endpoint" "dynamodb" {
 
 # Create Secrets Manager VPC Endpoint
 resource "aws_vpc_endpoint" "secretsmanager" {
-  vpc_id       = aws_vpc.main.id
-  service_name = "com.amazonaws.${var.region}.secretsmanager"
-  vpc_endpoint_type = "Interface"
-  subnet_ids = aws_subnet.private[*].id
-  security_group_ids = [aws_security_group.private.id]
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.region}.secretsmanager"
+  vpc_endpoint_type   = "Interface"
+  subnet_ids          = aws_subnet.private[*].id
+  security_group_ids  = [aws_security_group.private.id]
   private_dns_enabled = true
   tags = {
     Name = "vpce-${var.landscape}-${var.env}-${var.region_short}-secretsmanager"
@@ -280,7 +292,7 @@ resource "aws_route_table_association" "public_subnet_association" {
 
 # Route Tables for Private Subnets
 resource "aws_route_table" "private_rtb" {
-  count = length(aws_subnet.private)
+  count  = length(aws_subnet.private)
   vpc_id = aws_vpc.main.id
 
   tags = {
@@ -290,7 +302,7 @@ resource "aws_route_table" "private_rtb" {
 
 # Associate the private subnets with their route tables
 resource "aws_route_table_association" "private_rtb_association" {
-  count = length(aws_subnet.private)
+  count          = length(aws_subnet.private)
   subnet_id      = aws_subnet.private[count.index].id
   route_table_id = aws_route_table.private_rtb[count.index].id
 }
@@ -306,14 +318,14 @@ resource "aws_route_table" "isolated_rtb" {
 
 # Associate the isolated subnets with their route tables
 resource "aws_route_table_association" "isolated_route_table_association" {
-  count = length(aws_subnet.isolated)
+  count          = length(aws_subnet.isolated)
   subnet_id      = aws_subnet.isolated[count.index].id
   route_table_id = aws_route_table.isolated_rtb.id
 }
 
 # Create an Internet Gateway
 resource "aws_internet_gateway" "int_gw" {
-  count = var.create_internet_gateway ? 1 : 0
+  count  = var.create_internet_gateway ? 1 : 0
   vpc_id = aws_vpc.main.id
   tags = {
     Name = "igw-${var.landscape}-${var.env}-${var.region_short}"
@@ -322,7 +334,7 @@ resource "aws_internet_gateway" "int_gw" {
 
 # Add a route in the public route table that points 0.0.0.0/0 traffic to the Internet Gateway
 resource "aws_route" "internet_access" {
-  count = var.create_internet_gateway ? 1 : 0
+  count                  = var.create_internet_gateway ? 1 : 0
   route_table_id         = aws_route_table.public_rtb.id
   destination_cidr_block = "0.0.0.0/0"
   gateway_id             = aws_internet_gateway.int_gw[0].id
@@ -338,7 +350,7 @@ resource "aws_eip" "nat_eip" {
 
 # NAT Gateways (one per public subnet)
 resource "aws_nat_gateway" "nat_gateway" {
-  count = var.create_nat_gateways ? length(aws_subnet.public) : 0
+  count         = var.create_nat_gateways ? length(aws_subnet.public) : 0
   allocation_id = aws_eip.nat_eip[count.index].id
   subnet_id     = aws_subnet.public[count.index].id
 
@@ -349,7 +361,7 @@ resource "aws_nat_gateway" "nat_gateway" {
 
 # Route for internet traffic through the NAT Gateway
 resource "aws_route" "private_route" {
-  count = var.create_nat_gateways ? length(aws_subnet.private) : 0
+  count                  = var.create_nat_gateways ? length(aws_subnet.private) : 0
   route_table_id         = aws_route_table.private_rtb[count.index].id
   destination_cidr_block = "0.0.0.0/0"
   nat_gateway_id         = aws_nat_gateway.nat_gateway[count.index].id
@@ -358,13 +370,13 @@ resource "aws_route" "private_route" {
 # Create VPC Flow Logs for troubleshooting
 resource "aws_flow_log" "vpc_flow_logs" {
   log_destination = aws_cloudwatch_log_group.flow_log_group.arn
-  vpc_id               = aws_vpc.main.id
-  traffic_type         = "ALL"  # You can also specify "ACCEPT" or "REJECT"
-  iam_role_arn         = aws_iam_role.flow_log_role.arn
+  vpc_id          = aws_vpc.main.id
+  traffic_type    = "ALL" # You can also specify "ACCEPT" or "REJECT"
+  iam_role_arn    = aws_iam_role.flow_log_role.arn
 }
 
 resource "aws_cloudwatch_log_group" "flow_log_group" {
-  name = "/aws/vpc/${var.landscape}-${var.env}-${var.region_short}/flow-logs"
+  name              = "/aws/vpc/${var.landscape}-${var.env}-${var.region_short}/flow-logs"
   retention_in_days = var.retention_in_days
   tags = {
     Name = "flow-log-${var.landscape}-${var.env}-${var.region_short}-vpc"
@@ -409,45 +421,109 @@ resource "aws_iam_role_policy" "flow_log_policy" {
 }
 
 resource "aws_s3_bucket" "cloudtrail_bucket" {
-  bucket = "s3-${var.landscape}-${var.env}-${var.region_short}-cloudtrail"
-  force_destroy = true
-    tags = {
-      Name = "s3-${var.landscape}-${var.env}-${var.region_short}-cloudtrail"
+  bucket        = "s3-${var.landscape}-${var.env}-${var.region_short}-cloudtrail"
+  force_destroy = false
+  tags = {
+    Name = "s3-${var.landscape}-${var.env}-${var.region_short}-cloudtrail"
   }
+}
+
+resource "aws_s3_bucket_public_access_block" "cloudtrail" {
+  bucket                  = aws_s3_bucket.cloudtrail_bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "cloudtrail" {
+  bucket = aws_s3_bucket.cloudtrail_bucket.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_versioning" "cloudtrail" {
+  bucket = aws_s3_bucket.cloudtrail_bucket.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "cloudtrail" {
+  bucket = aws_s3_bucket.cloudtrail_bucket.id
+
+  rule {
+    id     = "expire-cloudtrail-logs"
+    status = "Enabled"
+
+    filter {}
+
+    expiration {
+      days = 365
+    }
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.cloudtrail]
 }
 
 resource "aws_s3_bucket_policy" "cloudtrail_bucket_policy" {
   bucket = aws_s3_bucket.cloudtrail_bucket.id
   policy = jsonencode({
-    Version = "2012-10-17",
+    Version = "2012-10-17"
     Statement = [
       {
-        Action = "s3:GetBucketAcl",
-        Effect = "Allow",
+        Sid    = "AWSCloudTrailAclCheck"
+        Effect = "Allow"
         Principal = {
           Service = "cloudtrail.amazonaws.com"
-        },
-        Resource = "${aws_s3_bucket.cloudtrail_bucket.arn}"
-      },
-      {
-        Action = "s3:PutObject",
-        Effect = "Allow",
-        Principal = {
-          Service = "cloudtrail.amazonaws.com"
-        },
-        Resource = "${aws_s3_bucket.cloudtrail_bucket.arn}/*",
+        }
+        Action   = "s3:GetBucketAcl"
+        Resource = aws_s3_bucket.cloudtrail_bucket.arn
         Condition = {
           StringEquals = {
-            "s3:x-amz-acl" = "bucket-owner-full-control"
+            "aws:SourceArn" = "arn:aws:cloudtrail:${var.region}:${var.account_id}:trail/${local.cloudtrail_name}"
+          }
+        }
+      },
+      {
+        Sid    = "AWSCloudTrailWrite"
+        Effect = "Allow"
+        Principal = {
+          Service = "cloudtrail.amazonaws.com"
+        }
+        Action   = "s3:PutObject"
+        Resource = "${aws_s3_bucket.cloudtrail_bucket.arn}/AWSLogs/${var.account_id}/*"
+        Condition = {
+          StringEquals = {
+            # CloudTrail still sends this canned ACL. S3 accepts it when ACLs
+            # are disabled, and the public access block does not treat it as public.
+            "s3:x-amz-acl"  = "bucket-owner-full-control"
+            "aws:SourceArn" = "arn:aws:cloudtrail:${var.region}:${var.account_id}:trail/${local.cloudtrail_name}"
           }
         }
       }
     ]
   })
+
+  depends_on = [aws_s3_bucket_public_access_block.cloudtrail]
 }
 
 resource "aws_cloudtrail" "main" {
-  name                          = "cloudtrail-${var.landscape}-${var.env}-${var.region_short}"
+  name                          = local.cloudtrail_name
   s3_bucket_name                = aws_s3_bucket.cloudtrail_bucket.bucket
   include_global_service_events = true
   is_multi_region_trail         = true

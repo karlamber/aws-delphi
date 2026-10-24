@@ -24,27 +24,7 @@ misconfigurations:
       - tf-modules/tf-vpc/main.tf
     statement: Public and private security groups allow outbound internet. Isolated subnets do not.
 
-  # Known gaps in files that already exist. The same finding in a new file still fails.
-  - id: AWS-0086
-    paths:
-      - tf-modules/tf-s3/main.tf
-      - tf-modules/tf-vpc/main.tf
-    statement: Known gap. These buckets do not block public ACLs yet.
-  - id: AWS-0087
-    paths:
-      - tf-modules/tf-s3/main.tf
-      - tf-modules/tf-vpc/main.tf
-    statement: Known gap. These buckets do not block public policies yet.
-  - id: AWS-0091
-    paths:
-      - tf-modules/tf-s3/main.tf
-      - tf-modules/tf-vpc/main.tf
-    statement: Known gap. These buckets do not ignore public ACLs yet.
-  - id: AWS-0093
-    paths:
-      - tf-modules/tf-s3/main.tf
-      - tf-modules/tf-vpc/main.tf
-    statement: Known gap. These buckets do not restrict public policies yet.
+  # Known gap in a file that already exists. The same finding in a new file still fails.
   - id: AWS-0016
     paths:
       - tf-modules/tf-vpc/main.tf

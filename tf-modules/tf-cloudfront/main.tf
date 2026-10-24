@@ -1,11 +1,40 @@
 # S3 Origin Bucket
 resource "aws_s3_bucket" "origin" {
-  bucket        = "s3-${var.app_alias}-${var.env}-${var.region_short}-cf-origin"
+  bucket = "s3-${var.app_alias}-${var.env}-${var.region_short}-cf-origin"
   tags = {
     App_Alias = var.app_alias
-    Name = "s3-${var.app_alias}-${var.env}-${var.region_short}-cf-origin"
+    Name      = "s3-${var.app_alias}-${var.env}-${var.region_short}-cf-origin"
   }
   force_destroy = true
+}
+
+resource "aws_s3_bucket_versioning" "origin" {
+  bucket = aws_s3_bucket.origin.id
+
+  versioning_configuration {
+    status = "Enabled"
+  }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "origin" {
+  bucket = aws_s3_bucket.origin.id
+
+  rule {
+    id     = "retain-current-expire-noncurrent"
+    status = "Enabled"
+
+    filter {}
+
+    noncurrent_version_expiration {
+      noncurrent_days = 30
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
+
+  depends_on = [aws_s3_bucket_versioning.origin]
 }
 
 resource "aws_s3_bucket_server_side_encryption_configuration" "encryption" {
@@ -13,7 +42,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "encryption" {
 
   rule {
     apply_server_side_encryption_by_default {
-      sse_algorithm     = "AES256"
+      sse_algorithm = "AES256"
     }
     bucket_key_enabled = true
   }
@@ -21,7 +50,7 @@ resource "aws_s3_bucket_server_side_encryption_configuration" "encryption" {
 
 # Block public access to the bucket
 resource "aws_s3_bucket_public_access_block" "origin" {
-  bucket = aws_s3_bucket.origin.id
+  bucket                  = aws_s3_bucket.origin.id
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
@@ -35,15 +64,15 @@ resource "aws_s3_bucket_policy" "origin" {
     Version = "2012-10-17",
     Statement = [
       {
-        Effect: "Allow",
-        Principal: {
-          Service: "cloudfront.amazonaws.com"
+        Effect : "Allow",
+        Principal : {
+          Service : "cloudfront.amazonaws.com"
         },
-        Action: "s3:GetObject",
-        Resource: "${aws_s3_bucket.origin.arn}/*",
-        Condition: {
-          StringEquals: {
-            "AWS:SourceArn": aws_cloudfront_distribution.this.arn
+        Action : "s3:GetObject",
+        Resource : "${aws_s3_bucket.origin.arn}/*",
+        Condition : {
+          StringEquals : {
+            "AWS:SourceArn" : aws_cloudfront_distribution.this.arn
           }
         }
       }
@@ -61,24 +90,63 @@ resource "aws_cloudfront_origin_access_control" "s3_oac" {
 }
 
 # S3 Logging Bucket
+# Legacy CloudFront standard logging (logging_config) requires object ACLs.
+# BucketOwnerEnforced stops log delivery.
 resource "aws_s3_bucket" "logging" {
-  bucket        = "s3-${var.app_alias}-${var.env}-${var.region_short}-cf-logging"
-  acl           = "private"  # Ensure this is enabled for CloudFront
+  bucket = "s3-${var.app_alias}-${var.env}-${var.region_short}-cf-logging"
+  acl    = "private" # Ensure this is enabled for CloudFront
   tags = {
     App_Alias = var.app_alias
-    Name = "s3-${var.app_alias}-${var.env}-${var.region_short}-cf-logging"
+    Name      = "s3-${var.app_alias}-${var.env}-${var.region_short}-cf-logging"
   }
   force_destroy = true
 }
 
-# Use specified response headers policy
-data "aws_cloudfront_response_headers_policy" "security_headers" {
-  count = var.response_headers_policy_name != null && var.response_headers_policy_name != "" ? 1 : 0
-  name  = var.response_headers_policy_name
+resource "aws_s3_bucket_lifecycle_configuration" "logging" {
+  bucket = aws_s3_bucket.logging.id
+
+  rule {
+    id     = "expire-cloudfront-logs"
+    status = "Enabled"
+
+    filter {}
+
+    expiration {
+      days = 90
+    }
+
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 7
+    }
+  }
 }
 
-locals {
-  security_headers_policy_id = var.response_headers_policy_name != null && var.response_headers_policy_name != "" ? data.aws_cloudfront_response_headers_policy.security_headers[0].id : null
+resource "aws_cloudfront_response_headers_policy" "security" {
+  name    = "rhp-${var.app_alias}-${var.env}-${var.region_short}-security"
+  comment = "HSTS, nosniff, frame deny, and referrer policy"
+
+  security_headers_config {
+    strict_transport_security {
+      access_control_max_age_sec = 31536000
+      include_subdomains         = true
+      preload                    = true
+      override                   = true
+    }
+
+    content_type_options {
+      override = true
+    }
+
+    frame_options {
+      frame_option = "DENY"
+      override     = true
+    }
+
+    referrer_policy {
+      referrer_policy = "strict-origin-when-cross-origin"
+      override        = true
+    }
+  }
 }
 
 resource "aws_s3_bucket_ownership_controls" "logging" {
@@ -91,7 +159,7 @@ resource "aws_s3_bucket_ownership_controls" "logging" {
 
 # Block public access to the bucket
 resource "aws_s3_bucket_public_access_block" "logging" {
-  bucket = aws_s3_bucket.logging.id
+  bucket                  = aws_s3_bucket.logging.id
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
@@ -105,19 +173,19 @@ resource "aws_s3_bucket_policy" "logging_policy" {
     Version = "2012-10-17",
     Statement = [
       {
-        Sid: "AllowCloudFrontLogs",
-        Effect: "Allow",
-        Principal: {
-          Service: "cloudfront.amazonaws.com"
+        Sid : "AllowCloudFrontLogs",
+        Effect : "Allow",
+        Principal : {
+          Service : "cloudfront.amazonaws.com"
         },
-        Action: "s3:PutObject",
-        Resource: ["${aws_s3_bucket.logging.arn}","${aws_s3_bucket.logging.arn}/*"],
-        Condition: {
-          StringEquals: {
-            "AWS:SourceAccount": "${var.account_id}"
+        Action : "s3:PutObject",
+        Resource : ["${aws_s3_bucket.logging.arn}", "${aws_s3_bucket.logging.arn}/*"],
+        Condition : {
+          StringEquals : {
+            "AWS:SourceAccount" : "${var.account_id}"
           },
-          StringLike: {
-            "AWS:SourceArn": "arn:aws:cloudfront::${var.account_id}:distribution/*"
+          StringLike : {
+            "AWS:SourceArn" : "arn:aws:cloudfront::${var.account_id}:distribution/*"
           }
         }
       }
@@ -135,13 +203,13 @@ locals {
         origin_id                = "${var.app_alias}-s3-origin"
         origin_path              = null
         origin_access_control_id = aws_cloudfront_origin_access_control.s3_oac.id
-        custom_origin_config = null
+        custom_origin_config     = null
       }
     },
     # Map additional origins to have a null origin_access_control_id if not S3
     { for k, v in var.additional_origins : k => merge(v, {
-        origin_access_control_id = null
-      }) }
+      origin_access_control_id = null
+    }) }
   )
 }
 
@@ -153,10 +221,10 @@ resource "aws_cloudfront_distribution" "this" {
   http_version        = "http2"
   price_class         = "PriceClass_100"
   wait_for_deployment = true
-  web_acl_id = var.web_acl_id != null ? var.web_acl_id : (var.enable_default_waf ? aws_wafv2_web_acl.cloudfront_waf[0].arn : null)
-  depends_on = [ aws_s3_bucket.logging, aws_s3_bucket.origin ]
+  web_acl_id          = var.web_acl_id != null ? var.web_acl_id : (var.enable_default_waf ? aws_wafv2_web_acl.cloudfront_waf[0].arn : null)
+  depends_on          = [aws_s3_bucket.logging, aws_s3_bucket.origin]
   tags = {
-    Name = "cloudfront-${var.app_alias}-${var.env}-${var.region_short}-distribution"
+    Name      = "cloudfront-${var.app_alias}-${var.env}-${var.region_short}-distribution"
     App_Alias = var.app_alias
   }
   logging_config {
@@ -178,34 +246,34 @@ resource "aws_cloudfront_distribution" "this" {
 
   # Default cache behavior
   default_cache_behavior {
-    allowed_methods        = var.default_cache_behavior.allowed_methods
-    cached_methods         = var.default_cache_behavior.cached_methods
-    cache_policy_id        = var.default_cache_behavior.cache_policy_id
-    compress               = var.default_cache_behavior.compress
-    default_ttl            = var.default_cache_behavior.default_ttl
-    max_ttl                = var.default_cache_behavior.max_ttl
-    min_ttl                = var.default_cache_behavior.min_ttl
-    target_origin_id       = var.default_cache_behavior.target_origin_id
-    viewer_protocol_policy = var.default_cache_behavior.viewer_protocol_policy
-    response_headers_policy_id = local.security_headers_policy_id
+    allowed_methods            = var.default_cache_behavior.allowed_methods
+    cached_methods             = var.default_cache_behavior.cached_methods
+    cache_policy_id            = var.default_cache_behavior.cache_policy_id
+    compress                   = var.default_cache_behavior.compress
+    default_ttl                = var.default_cache_behavior.default_ttl
+    max_ttl                    = var.default_cache_behavior.max_ttl
+    min_ttl                    = var.default_cache_behavior.min_ttl
+    target_origin_id           = var.default_cache_behavior.target_origin_id
+    viewer_protocol_policy     = var.default_cache_behavior.viewer_protocol_policy
+    response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
   }
 
   # Ordered cache behaviors
   dynamic "ordered_cache_behavior" {
     for_each = var.ordered_cache_behaviors
     content {
-      path_pattern             = ordered_cache_behavior.value.path_pattern
-      allowed_methods          = ordered_cache_behavior.value.allowed_methods
-      cached_methods           = ordered_cache_behavior.value.cached_methods
-      compress                 = ordered_cache_behavior.value.compress
-      cache_policy_id          = ordered_cache_behavior.value.cache_policy_id
-      origin_request_policy_id = ordered_cache_behavior.value.origin_request_policy_id
-      viewer_protocol_policy   = ordered_cache_behavior.value.viewer_protocol_policy
-      default_ttl              = ordered_cache_behavior.value.default_ttl
-      max_ttl                  = ordered_cache_behavior.value.max_ttl
-      min_ttl                  = ordered_cache_behavior.value.min_ttl
-      target_origin_id         = ordered_cache_behavior.value.target_origin_id
-      response_headers_policy_id = local.security_headers_policy_id
+      path_pattern               = ordered_cache_behavior.value.path_pattern
+      allowed_methods            = ordered_cache_behavior.value.allowed_methods
+      cached_methods             = ordered_cache_behavior.value.cached_methods
+      compress                   = ordered_cache_behavior.value.compress
+      cache_policy_id            = ordered_cache_behavior.value.cache_policy_id
+      origin_request_policy_id   = ordered_cache_behavior.value.origin_request_policy_id
+      viewer_protocol_policy     = ordered_cache_behavior.value.viewer_protocol_policy
+      default_ttl                = ordered_cache_behavior.value.default_ttl
+      max_ttl                    = ordered_cache_behavior.value.max_ttl
+      min_ttl                    = ordered_cache_behavior.value.min_ttl
+      target_origin_id           = ordered_cache_behavior.value.target_origin_id
+      response_headers_policy_id = aws_cloudfront_response_headers_policy.security.id
     }
 
   }

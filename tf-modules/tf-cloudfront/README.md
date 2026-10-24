@@ -17,7 +17,6 @@
 - `ordered_cache_behaviors`
 - `custom_error_responses`
 - `geo_restriction`
-- `response_headers_policy_name`
 - `web_acl_id`
 - `enable_default_waf`
 

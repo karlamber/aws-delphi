@@ -46,9 +46,9 @@ variable "cloudfront_default_root_object" {
 # Additional origins besides the S3 bucket. If none provided, only the S3 bucket origin is set.
 variable "additional_origins" {
   type = map(object({
-    domain_name              = string
-    origin_id                = string
-    origin_path              = string
+    domain_name = string
+    origin_id   = string
+    origin_path = string
     custom_origin_config = object({
       http_port                = number
       https_port               = number
@@ -86,13 +86,13 @@ variable "ordered_cache_behaviors" {
     cache_policy_id          = string
     origin_request_policy_id = string
     viewer_protocol_policy   = string
-    default_ttl            = optional(number)
-    max_ttl                = optional(number)
-    min_ttl                = optional(number)
+    default_ttl              = optional(number)
+    max_ttl                  = optional(number)
+    min_ttl                  = optional(number)
     target_origin_id         = string
   }))
   description = "List of ordered cache behaviors."
-  default = []
+  default     = []
 }
 
 variable "custom_error_responses" {
@@ -103,7 +103,7 @@ variable "custom_error_responses" {
     error_caching_min_ttl = number
   }))
   description = "Custom error responses for the CloudFront distribution."
-  default = []
+  default     = []
 }
 
 variable "geo_restriction" {
@@ -116,12 +116,6 @@ variable "geo_restriction" {
     restriction_type = "whitelist"
     locations        = ["US"]
   }
-}
-
-variable "response_headers_policy_name" {
-  description = "Name of the CloudFront response headers policy to use (e.g., 'SecurityHeadersPolicy' for AWS managed, or custom policy name)"
-  type        = string
-  default     = null
 }
 
 variable "web_acl_id" {

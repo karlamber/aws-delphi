@@ -10,6 +10,14 @@ resource "aws_s3_bucket" "bucket" {
   }
 }
 
+resource "aws_s3_bucket_public_access_block" "bucket" {
+  bucket                  = aws_s3_bucket.bucket.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
 resource "aws_s3_bucket_versioning" "versioning" {
   count  = var.versioning_enabled ? 1 : 0
   bucket = aws_s3_bucket.bucket.id
@@ -120,7 +128,7 @@ resource "aws_iam_policy" "full_access_policy" {
 
 # Bucket policy for cross-account access
 resource "aws_s3_bucket_policy" "cross_account_access" {
-  count = (length(var.full_access_roles) + length(var.readonly_roles)) > 0 ? 1 : 0
+  count  = (length(var.full_access_roles) + length(var.readonly_roles)) > 0 ? 1 : 0
   bucket = aws_s3_bucket.bucket.id
 
   policy = jsonencode({

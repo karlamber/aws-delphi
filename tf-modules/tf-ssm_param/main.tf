@@ -11,11 +11,11 @@ resource "aws_ssm_parameter" "secure" {
 
   name        = "/${each.value.comp}/${each.value.app_alias}/${each.value.name}"
   value       = each.value.value
-  type        = each.value.type
+  type        = "SecureString"
   description = each.value.description
   tags = {
     App_Alias = lower(each.value.app_alias)
-    Name = "/${each.value.comp}/${each.value.app_alias}/${each.value.name}"
+    Name      = "/${each.value.comp}/${each.value.app_alias}/${each.value.name}"
   }
 
   lifecycle {
@@ -33,6 +33,6 @@ resource "aws_ssm_parameter" "non_secure" {
   description = each.value.description
   tags = {
     App_Alias = lower(each.value.app_alias)
-    Name = "/${each.value.comp}/${each.value.app_alias}/${each.value.name}"
+    Name      = "/${each.value.comp}/${each.value.app_alias}/${each.value.name}"
   }
 }
