@@ -1,0 +1,127 @@
+name: Security
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  secrets:
+    name: Secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # The gitleaks CLI is MIT-licensed. gitleaks-action requires a license
+      # for organization-owned repositories, so this job installs the binary
+      # and checks the published checksum instead.
+      - name: Install gitleaks
+        env:
+          GITLEAKS_VERSION: "8.30.1"
+          GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}"
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -sSfL -o "${archive}" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
+          echo "${GITLEAKS_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "${archive}" gitleaks
+          sudo install -m 0755 gitleaks /usr/local/bin/gitleaks
+
+      - name: Scan git history
+        run: gitleaks detect --source . --redact --verbose --exit-code 1
+
+  checkov:
+    name: Checkov
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      # Pinned to the Checkov release that created .checkov.baseline.
+      # Bump the version and regenerate that file in the same change.
+      - name: Install Checkov
+        run: |
+          set -euo pipefail
+          python3 -m venv "${RUNNER_TEMP}/checkov"
+          "${RUNNER_TEMP}/checkov/bin/pip" install --disable-pip-version-check 'checkov==3.3.20'
+
+      # Scans module source only. No AWS credentials and no terragrunt apply.
+      # Findings already recorded in .checkov.baseline do not fail the job.
+      # A finding that is not in the baseline does.
+      - name: Scan Terraform modules
+        run: |
+          "${RUNNER_TEMP}/checkov/bin/checkov" \
+            -d tf-modules \
+            --framework terraform \
+            --download-external-modules false \
+            --compact \
+            --baseline .checkov.baseline
+
+  trivy:
+    name: Trivy config
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Trivy
+        env:
+          TRIVY_VERSION: "0.74.0"
+          TRIVY_SHA256: "2ae6fe3ee734b7fdf11335663e18c75ea12dccc76062f09f164a3b0f8be4371a"
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}"
+          archive="trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz"
+          curl -sSfL -o "${archive}" "https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/${archive}"
+          echo "${TRIVY_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "${archive}" trivy
+          sudo install -m 0755 trivy /usr/local/bin/trivy
+
+      # High and critical misconfigurations fail the job. Accepted findings
+      # and their reasons are listed in .trivyignore.yaml.
+      - name: Scan Terraform
+        run: |
+          trivy config \
+            --severity HIGH,CRITICAL \
+            --exit-code 1 \
+            --ignorefile .trivyignore.yaml \
+            --skip-dirs .terragrunt-cache \
+            --skip-files '**/account.hcl' \
+            --tf-exclude-downloaded-modules \
+            --skip-version-check \
+            .
+
+  workflows:
+    name: Workflow lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install actionlint
+        env:
+          ACTIONLINT_VERSION: "1.7.12"
+          ACTIONLINT_SHA256: "8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8"
+        run: |
+          set -euo pipefail
+          cd "${RUNNER_TEMP}"
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -sSfL -o "${archive}" "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          echo "${ACTIONLINT_SHA256}  ${archive}" | sha256sum -c -
+          tar -xzf "${archive}" actionlint
+          sudo install -m 0755 actionlint /usr/local/bin/actionlint
+
+      - name: Lint workflows
+        run: actionlint

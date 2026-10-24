@@ -1,0 +1,195 @@
+{
+    "failed_checks": [
+        {
+            "file": "/tf-apigw/main.tf",
+            "findings": [
+                {
+                    "resource": "aws_apigatewayv2_route.default",
+                    "check_ids": [
+                        "CKV_AWS_309"
+                    ]
+                }
+            ]
+        },
+        {
+            "file": "/tf-cloudfront/main.tf",
+            "findings": [
+                {
+                    "resource": "aws_cloudfront_distribution.this",
+                    "check_ids": [
+                        "CKV_AWS_310"
+                    ]
+                }
+            ]
+        },
+        {
+            "file": "/tf-cloudwatch/main.tf",
+            "findings": [
+                {
+                    "resource": "aws_iam_policy.cloudwatch_logging_policy",
+                    "check_ids": [
+                        "CKV_AWS_290",
+                        "CKV_AWS_355"
+                    ]
+                }
+            ]
+        },
+        {
+            "file": "/tf-github-oidc-role/main.tf",
+            "findings": [
+                {
+                    "resource": "github_oidc_role",
+                    "check_ids": [
+                        "CKV_TF_1"
+                    ]
+                }
+            ]
+        },
+        {
+            "file": "/tf-lambda/main.tf",
+            "findings": [
+                {
+                    "resource": "aws_cloudwatch_log_group.lambda_logs",
+                    "check_ids": [
+                        "CKV_AWS_158",
+                        "CKV_AWS_338"
+                    ]
+                },
+                {
+                    "resource": "aws_lambda_function.this",
+                    "check_ids": [
+                        "CKV_AWS_116"
+                    ]
+                }
+            ]
+        },
+        {
+            "file": "/tf-rds/main.tf",
+            "findings": [
+                {
+                    "resource": "aws_availability_zones.available",
+                    "check_ids": [
+                        "CKV_AWS_394"
+                    ]
+                },
+                {
+                    "resource": "aws_rds_cluster.this",
+                    "check_ids": [
+                        "CKV_AWS_139",
+                        "CKV_AWS_162",
+                        "CKV_AWS_324"
+                    ]
+                },
+                {
+                    "resource": "aws_rds_cluster_instance.this",
+                    "check_ids": [
+                        "CKV_AWS_118",
+                        "CKV_AWS_226",
+                        "CKV_AWS_353"
+                    ]
+                }
+            ]
+        },
+        {
+            "file": "/tf-vpc/main.tf",
+            "findings": [
+                {
+                    "resource": "aws_availability_zones.available",
+                    "check_ids": [
+                        "CKV_AWS_394"
+                    ]
+                },
+                {
+                    "resource": "aws_cloudtrail.main",
+                    "check_ids": [
+                        "CKV_AWS_252",
+                        "CKV_AWS_35",
+                        "CKV_AWS_36"
+                    ]
+                },
+                {
+                    "resource": "aws_cloudwatch_log_group.flow_log_group",
+                    "check_ids": [
+                        "CKV_AWS_158",
+                        "CKV_AWS_338"
+                    ]
+                },
+                {
+                    "resource": "aws_iam_role_policy.flow_log_policy",
+                    "check_ids": [
+                        "CKV_AWS_290",
+                        "CKV_AWS_355"
+                    ]
+                },
+                {
+                    "resource": "aws_security_group.private",
+                    "check_ids": [
+                        "CKV_AWS_23",
+                        "CKV_AWS_382"
+                    ]
+                },
+                {
+                    "resource": "aws_security_group.public",
+                    "check_ids": [
+                        "CKV_AWS_23",
+                        "CKV_AWS_382"
+                    ]
+                },
+                {
+                    "resource": "aws_security_group_rule.isolated_from_private",
+                    "check_ids": [
+                        "CKV_AWS_23"
+                    ]
+                },
+                {
+                    "resource": "aws_security_group_rule.isolated_to_private",
+                    "check_ids": [
+                        "CKV_AWS_23"
+                    ]
+                },
+                {
+                    "resource": "aws_security_group_rule.private_from_isolated",
+                    "check_ids": [
+                        "CKV_AWS_23"
+                    ]
+                },
+                {
+                    "resource": "aws_security_group_rule.private_from_private",
+                    "check_ids": [
+                        "CKV_AWS_23"
+                    ]
+                },
+                {
+                    "resource": "aws_security_group_rule.private_from_public",
+                    "check_ids": [
+                        "CKV_AWS_23"
+                    ]
+                },
+                {
+                    "resource": "aws_subnet.public",
+                    "check_ids": [
+                        "CKV_AWS_130"
+                    ]
+                }
+            ]
+        },
+        {
+            "file": "/tf-waf/main.tf",
+            "findings": [
+                {
+                    "resource": "aws_cloudwatch_log_group.waf_logs",
+                    "check_ids": [
+                        "CKV_AWS_158",
+                        "CKV_AWS_338"
+                    ]
+                },
+                {
+                    "resource": "aws_wafv2_web_acl.this",
+                    "check_ids": [
+                        "CKV_AWS_192"
+                    ]
+                }
+            ]
+        }
+    ]
+}

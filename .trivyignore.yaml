@@ -1,0 +1,51 @@
+misconfigurations:
+  # Customer-managed KMS keys are a monthly charge. SSE-S3 and AWS-managed
+  # keys are the free encryption used in this repo.
+  - id: AWS-0132
+    paths:
+      - tf-modules/tf-s3/main.tf
+      - tf-modules/tf-cloudfront/main.tf
+      - tf-modules/tf-vpc/main.tf
+    statement: Paid customer-managed KMS key. Free control is SSE-S3 or an AWS-managed key.
+  - id: AWS-0015
+    paths:
+      - tf-modules/tf-vpc/main.tf
+    statement: Paid customer-managed KMS key for CloudTrail.
+
+  # Public subnets exist so NAT gateways and load balancers can take public addresses.
+  - id: AWS-0164
+    paths:
+      - tf-modules/tf-vpc/main.tf
+    statement: Public subnets assign public IPs. Private and isolated subnets do not.
+
+  # Outbound internet on the public and private tiers is the VPC design.
+  - id: AWS-0104
+    paths:
+      - tf-modules/tf-vpc/main.tf
+    statement: Public and private security groups allow outbound internet. Isolated subnets do not.
+
+  # Known gaps in files that already exist. The same finding in a new file still fails.
+  - id: AWS-0086
+    paths:
+      - tf-modules/tf-s3/main.tf
+      - tf-modules/tf-vpc/main.tf
+    statement: Known gap. These buckets do not block public ACLs yet.
+  - id: AWS-0087
+    paths:
+      - tf-modules/tf-s3/main.tf
+      - tf-modules/tf-vpc/main.tf
+    statement: Known gap. These buckets do not block public policies yet.
+  - id: AWS-0091
+    paths:
+      - tf-modules/tf-s3/main.tf
+      - tf-modules/tf-vpc/main.tf
+    statement: Known gap. These buckets do not ignore public ACLs yet.
+  - id: AWS-0093
+    paths:
+      - tf-modules/tf-s3/main.tf
+      - tf-modules/tf-vpc/main.tf
+    statement: Known gap. These buckets do not restrict public policies yet.
+  - id: AWS-0016
+    paths:
+      - tf-modules/tf-vpc/main.tf
+    statement: Known gap. CloudTrail log-file validation is not enabled yet.
