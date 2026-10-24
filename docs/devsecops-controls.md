@@ -35,17 +35,17 @@ The deployed API uses Cognito (`AUTH_MODE = cognito`). Basic auth stays availabl
 
 IAM Access Analyzer is the dev stack `access_analyzer`. It creates an external-access analyzer in `us-east-1`, which reports when a resource is shared outside the account.
 
-## Reviewing the account after it exists
+## Security scan on the account after it exists
 
 Prowler is a workflow I start by hand from the Actions tab on `main`, once the read-only role exists. I paste the `iam_role_arn` output from `github_oidc_readonly`. The workflow accepts only the role named `role-delphi-dev-ue1-github_oidc_readonly`, so the deploy role cannot be used for the scan. The HTML report is saved as a workflow artifact.
 
 Some Prowler checks need more permission than `SecurityAudit` and show up as skipped. Those skips stay skipped. The read-only role does not get write access to make the report look fuller.
 
-## What the claim covers
+## What is covered here
 
-This is preventive control in git, a keyless deploy, and a point-in-time read of the account when I choose to run one. A security operations center, a FedRAMP authorization, and always-on detection are a larger scope than this work. Prowler runs when I start it, and it does not page anyone.
+This setup provides basic security controls: it checks for secrets in code, uses keyless deployments, and allows manual security scans when I choose to run them. It does **not** include a full security operations center, FedRAMP compliance, or continuous/automatic monitoring—those are more advanced than this project's scope. Prowler only runs scans when I manually start it; there are no automatic alerts.
 
-The Checkov baseline and the Trivy ignore file are the accepted gaps. Public addresses on the public subnets, and outbound internet from the public and private tiers, are the VPC design. Encryption is SSE-S3 or an AWS-managed key.
+Any known or accepted issues are documented in the Checkov baseline and Trivy ignore files. It’s intentional that public subnets have public addresses and that both public and private VPC tiers can access the internet—this is part of the network’s planned design. For encryption, S3 buckets use SSE-S3 or AWS-managed keys.
 
 ## Running the same checks locally
 
