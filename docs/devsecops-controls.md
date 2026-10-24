@@ -1,8 +1,9 @@
 # DevSecOps controls for easyCMDB
 
-The claim I can defend is the delivery path. A pull request fails when it leaks a secret, ships a known high or critical vulnerability in a production dependency, or adds a new Terraform misconfiguration. Deploys into AWS use a GitHub OIDC role, so the pipeline holds no long-lived access key. The account controls are written in the `aws-delphi-dev` stacks and take effect when that account is provisioned and the stacks are applied.
+Being a lab project, all of the devsecops controls implemented are free. Customer-managed KMS keys, AWS WAF, GuardDuty, Security Hub, AWS Config, Inspector, and Macie are left out because they cost money.
 
-Every control on this page is free. Customer-managed KMS keys, AWS WAF, GuardDuty, Security Hub, AWS Config, Inspector, and Macie are left out because they cost money.
+A pull request fails when it leaks a secret, ships a known high or critical vulnerability in a production dependency, or adds a new Terraform misconfiguration. Deploys into AWS use a GitHub OIDC role, so the pipeline holds no long-lived access key. The account controls are written in the `aws-delphi-dev` stacks and take effect when that account is provisioned and the stacks are applied.
+
 
 ## What a pull request has to pass
 
