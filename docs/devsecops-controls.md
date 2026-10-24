@@ -1,52 +1,56 @@
 # DevSecOps controls for easyCMDB
 
-The pull-request checks live in git. The account controls are written in the `aws-delphi-dev` stacks and apply when that account is provisioned. A pull request cannot merge a leaked secret, a known high vulnerability in a production dependency, or a new Terraform misconfiguration without a failing check. Deploys use a GitHub OIDC role. There are no long-lived cloud keys in the pipeline.
+The claim I can defend is the delivery path. A pull request fails when it leaks a secret, ships a known high or critical vulnerability in a production dependency, or adds a new Terraform misconfiguration. Deploys into AWS use a GitHub OIDC role, so the pipeline holds no long-lived access key. The account controls are written in the `aws-delphi-dev` stacks and take effect when that account is provisioned and the stacks are applied.
 
-This is not a SOC, and it is not a FedRAMP package. Detective review is a Prowler run I start by hand.
+Every control on this page is free. Customer-managed KMS keys, AWS WAF, GuardDuty, Security Hub, AWS Config, Inspector, and Macie are left out because they cost money.
 
-Cost of every control below is $0. Customer-managed KMS keys, AWS WAF, GuardDuty, Security Hub, AWS Config, Inspector, and Macie are not used.
+## What a pull request has to pass
 
-## Controls
+`easycmdb-api`, `easycmdb-web`, and `aws-delphi` each run a **Secret scan** job with gitleaks. A pull request that adds a key fails that job.
 
-| Control | Where it is enforced | How to verify |
-|---|---|---|
-| Secret scanning | `easycmdb-api`, `easycmdb-web`, and `aws-delphi` workflow job **Secret scan** (gitleaks) | A pull request that adds a key fails the job. |
-| Production dependency scan | App workflow job **Dependency scan** (Trivy) | Fails on a high or critical production advisory that already has a fix. |
-| Terraform policy | `aws-delphi` job **Checkov**, compared with `.checkov.baseline` | A finding that is not in the baseline fails the job. |
-| Terraform misconfiguration | `aws-delphi` job **Trivy config**, exceptions in `.trivyignore.yaml` | A new high or critical finding fails the job. Each ignore line states why. |
-| Workflow syntax | `aws-delphi` job **Workflow lint** | `actionlint` fails the job. |
-| Dependency updates | `.github/dependabot.yml` in each repo | Minor and patch updates arrive as one pull request. Majors stay separate. |
-| Keyless deploy | `tf-modules/tf-github-oidc-role` | The app deploy role can update the Lambda and the SPA bucket. It cannot administer the account. |
-| Read-only audit role | Dev stack `github_oidc_readonly` | Trusts only `karlamber/aws-delphi` on `main`. Attached policy is AWS `SecurityAudit`. |
-| Account access findings | Dev stack `access_analyzer` | External-access analyzer in `us-east-1`. |
-| Encryption at rest | Aurora uses the AWS-managed key. S3 and the CloudTrail bucket use SSE-S3. | No customer-managed KMS key. |
-| Private data tier | Aurora subnets are isolated. | No route to the internet from that tier. |
-| Trail integrity | `aws_cloudtrail.main` has `enable_log_file_validation` | One management-event trail. No data events. |
-| Trail retention | CloudTrail bucket lifecycle, 365 days | Public access is blocked. `force_destroy` is false. |
-| Edge headers | `aws_cloudfront_response_headers_policy.security` | HSTS, nosniff, frame deny, referrer policy. |
-| No paid WAF | `enable_default_waf = false` on dev and prod CloudFront | A later apply does not create a web ACL. |
-| App authentication | Dev Lambda `AUTH_MODE = cognito` | Basic auth remains for local runs. |
-| Change audit | `easycmdb-api` log line `audit.mutation` | A successful write logs who changed what. |
-| Optional MFA | Dev Cognito `mfa_configuration = OPTIONAL` | Software-token MFA. Password sign-in still works until a user enrolls. |
-| Point-in-time account review | Workflow **Prowler**, started with `workflow_dispatch` | Assumes only the read-only role. The HTML report is the artifact. |
+The two app repositories also run a **Dependency scan** job with Trivy. It looks at production dependencies. It fails when a high or critical advisory already has a fix. Findings that only affect development tools stay in `npm audit` and do not block the merge.
 
-## What I will not say
+`aws-delphi` adds the Terraform checks. **Checkov** scans `tf-modules` and compares the result with `.checkov.baseline`. A finding already in the baseline is an accepted gap. A finding that is new fails the job. **Trivy config** then looks for high and critical misconfigurations. Exceptions live in `.trivyignore.yaml`, and each line says why it is there. The same workflow runs **Workflow lint** with `actionlint`, so a broken workflow file fails before anyone relies on it.
 
-I do not run continuous detection. Prowler does not page anyone. I have not turned on GuardDuty, Security Hub, or AWS Config.
+Dependabot is configured in each repository. Minor and patch updates arrive together as one pull request. A major upgrade stays on its own pull request so it can be tested on that branch before it merges.
 
-I do not own a FedRAMP authorization, and I do not claim the dev account meets a compliance regime.
+## How a deploy gets into the account
 
-The Checkov baseline and the Trivy ignore file are accepted gaps, not a clean scan. Public subnet addresses and outbound internet on the public and private tiers are the VPC design. Customer-managed KMS keys are a paid service, so encryption here is SSE-S3 or an AWS-managed key.
+The app deploy role is `tf-modules/tf-github-oidc-role`. GitHub assumes it with OIDC. That role can update the Lambda and the SPA bucket, and it stops there. It is not an administrator role.
 
-## Commands
+A second role lives in the dev stack `github_oidc_readonly`. It trusts only `karlamber/aws-delphi` on `main`, and the only policy attached to it is the AWS managed `SecurityAudit` policy. That role exists so a manual Prowler run can read the account. The apps do not deploy with it.
 
-From `aws-delphi`, the same checks the pull-request jobs run:
+## What the dev account is built to do
+
+These controls are in the Terraform. They are live after `aws-delphi-dev` exists and the stacks have been applied.
+
+Aurora uses the AWS-managed encryption key. S3 and the CloudTrail bucket use SSE-S3. The database sits on isolated subnets, and that tier has no route to the internet.
+
+There is one CloudTrail trail, and it records management events. Log file validation is on, so the trail can show whether a log file changed after AWS delivered it. The bucket keeps objects for 365 days, blocks public access, and has `force_destroy` set to false. Data events stay off because that trail feature is paid.
+
+CloudFront attaches a security-headers policy: HSTS, `nosniff`, frame deny, and a referrer policy. `enable_default_waf` is false on the dev and prod distributions, so an apply leaves the paid web ACL out. The headers policy is the free control at the edge.
+
+The deployed API uses Cognito (`AUTH_MODE = cognito`). Basic auth stays available for local runs. A successful write logs an `audit.mutation` line that records who changed what. Dev Cognito offers optional software-token MFA, so a user can enroll an authenticator app and a password-only user can still sign in. Prod does not set that input, so a prod apply leaves the pool unchanged.
+
+IAM Access Analyzer is the dev stack `access_analyzer`. It creates an external-access analyzer in `us-east-1`, which reports when a resource is shared outside the account.
+
+## Reviewing the account after it exists
+
+Prowler is a workflow I start by hand from the Actions tab on `main`, once the read-only role exists. I paste the `iam_role_arn` output from `github_oidc_readonly`. The workflow accepts only the role named `role-delphi-dev-ue1-github_oidc_readonly`, so the deploy role cannot be used for the scan. The HTML report is saved as a workflow artifact.
+
+Some Prowler checks need more permission than `SecurityAudit` and show up as skipped. Those skips stay skipped. The read-only role does not get write access to make the report look fuller.
+
+## What the claim covers
+
+This is preventive control in git, a keyless deploy, and a point-in-time read of the account when I choose to run one. A security operations center, a FedRAMP authorization, and always-on detection are a larger scope than this work. Prowler runs when I start it, and it does not page anyone.
+
+The Checkov baseline and the Trivy ignore file are the accepted gaps. Public addresses on the public subnets, and outbound internet from the public and private tiers, are the VPC design. Encryption is SSE-S3 or an AWS-managed key.
+
+## Running the same checks locally
+
+From `aws-delphi`, these are the Terraform checks the pull-request jobs run:
 
 ```bash
 checkov -d tf-modules --framework terraform --download-external-modules false --compact --baseline .checkov.baseline
 trivy config --severity HIGH,CRITICAL --exit-code 1 --ignorefile .trivyignore.yaml --tf-exclude-downloaded-modules .
 ```
-
-After the dev read-only role exists, start **Prowler** from the Actions tab on `main`. Paste the `iam_role_arn` output from `github_oidc_readonly`. Do not paste the deploy role. The workflow rejects any other role name.
-
-Some Prowler checks need more than `SecurityAudit` and will be skipped. Those checks are not fixed by adding write access.
