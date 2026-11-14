@@ -3,10 +3,10 @@ locals {
 }
 
 resource "aws_s3_bucket" "bucket" {
-  bucket = "s3-${var.app_alias}-${var.env}-${var.region_short}-${var.detail}"
+  bucket = "s3-${var.app_alias}-${var.env}-${var.region_short}-${var.account_id}-${var.detail}"
   tags = {
     App_Alias = var.app_alias
-    Name      = "s3-${var.app_alias}-${var.env}-${var.region_short}-${var.detail}"
+    Name      = "s3-${var.app_alias}-${var.env}-${var.region_short}-${var.account_id}-${var.detail}"
   }
 }
 
@@ -80,10 +80,10 @@ resource "aws_s3_bucket_lifecycle_configuration" "lifecycle" {
 
 # IAM Policy for Read-Only Access
 resource "aws_iam_policy" "read_only_policy" {
-  name        = "policy-s3-${var.app_alias}-${var.env}-${var.region_short}-${var.detail}-readonly"
-  description = "Read-only access policy for s3-${var.app_alias}-${var.env}-${var.region_short}-${var.detail} bucket"
+  name        = "policy-s3-${var.app_alias}-${var.env}-${var.region_short}-${var.account_id}-${var.detail}-readonly"
+  description = "Read-only access policy for s3-${var.app_alias}-${var.env}-${var.region_short}-${var.account_id}-${var.detail} bucket"
   tags = {
-    Name      = "policy-s3-${var.app_alias}-${var.env}-${var.region_short}-${var.detail}-readonly"
+    Name      = "policy-s3-${var.app_alias}-${var.env}-${var.region_short}-${var.account_id}-${var.detail}-readonly"
     App_Alias = "${var.app_alias}"
   }
   policy = jsonencode({
@@ -100,10 +100,10 @@ resource "aws_iam_policy" "read_only_policy" {
 
 # IAM Policy for Full Access
 resource "aws_iam_policy" "full_access_policy" {
-  name        = "policy-s3-${var.app_alias}-${var.env}-${var.region_short}-${var.detail}-full"
-  description = "Full access policy for s3-${var.app_alias}-${var.env}-${var.region_short}-${var.detail} bucket"
+  name        = "policy-s3-${var.app_alias}-${var.env}-${var.region_short}-${var.account_id}-${var.detail}-full"
+  description = "Full access policy for s3-${var.app_alias}-${var.env}-${var.region_short}-${var.account_id}-${var.detail} bucket"
   tags = {
-    Name      = "policy-s3-${var.app_alias}-${var.env}-${var.region_short}-${var.detail}-full"
+    Name      = "policy-s3-${var.app_alias}-${var.env}-${var.region_short}-${var.account_id}-${var.detail}-full"
     App_Alias = "${var.app_alias}"
   }
   policy = jsonencode({

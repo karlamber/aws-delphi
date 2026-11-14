@@ -35,7 +35,7 @@ remote_state {
   backend = "s3"
   config = {
     encrypt      = true
-    bucket       = "s3-${local.landscape}-${local.env}-${local.region_short}-terraform-state"
+    bucket       = "s3-${local.landscape}-${local.env}-${local.region_short}-${local.account_id}-terraform-state"
     key          = "${path_relative_to_include()}/terraform.tfstate"
     region       = local.region
     use_lockfile = true

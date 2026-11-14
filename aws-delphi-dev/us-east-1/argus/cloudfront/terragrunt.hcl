@@ -54,7 +54,7 @@ inputs = {
   cloudfront_default_root_object = "index.html"
 
   # Default behavior serves the SPA from the module-created S3 origin
-  # (s3-argus-{env}-{region_short}-cf-origin, origin_id argus-s3-origin).
+  # (s3-argus-{env}-{region_short}-{account_id}-cf-origin, origin_id argus-s3-origin).
   default_cache_behavior = {
     allowed_methods        = ["GET", "HEAD", "OPTIONS"]
     cached_methods         = ["GET", "HEAD"]

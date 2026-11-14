@@ -1,9 +1,9 @@
 # S3 Origin Bucket
 resource "aws_s3_bucket" "origin" {
-  bucket        = "s3-${var.app_alias}-${var.env}-${var.region_short}-cf-origin"
+  bucket        = "s3-${var.app_alias}-${var.env}-${var.region_short}-${var.account_id}-cf-origin"
   tags = {
     App_Alias = var.app_alias
-    Name = "s3-${var.app_alias}-${var.env}-${var.region_short}-cf-origin"
+    Name = "s3-${var.app_alias}-${var.env}-${var.region_short}-${var.account_id}-cf-origin"
   }
   force_destroy = true
 }
@@ -62,11 +62,11 @@ resource "aws_cloudfront_origin_access_control" "s3_oac" {
 
 # S3 Logging Bucket
 resource "aws_s3_bucket" "logging" {
-  bucket        = "s3-${var.app_alias}-${var.env}-${var.region_short}-cf-logging"
+  bucket        = "s3-${var.app_alias}-${var.env}-${var.region_short}-${var.account_id}-cf-logging"
   acl           = "private"  # Ensure this is enabled for CloudFront
   tags = {
     App_Alias = var.app_alias
-    Name = "s3-${var.app_alias}-${var.env}-${var.region_short}-cf-logging"
+    Name = "s3-${var.app_alias}-${var.env}-${var.region_short}-${var.account_id}-cf-logging"
   }
   force_destroy = true
 }

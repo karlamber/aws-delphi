@@ -409,10 +409,10 @@ resource "aws_iam_role_policy" "flow_log_policy" {
 }
 
 resource "aws_s3_bucket" "cloudtrail_bucket" {
-  bucket = "s3-${var.landscape}-${var.env}-${var.region_short}-cloudtrail"
+  bucket = "s3-${var.landscape}-${var.env}-${var.region_short}-${var.account_id}-cloudtrail"
   force_destroy = true
     tags = {
-      Name = "s3-${var.landscape}-${var.env}-${var.region_short}-cloudtrail"
+      Name = "s3-${var.landscape}-${var.env}-${var.region_short}-${var.account_id}-cloudtrail"
   }
 }
 
