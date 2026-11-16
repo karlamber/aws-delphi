@@ -7,7 +7,7 @@ terraform {
   }
 }
 
-# Assume the 59madison DNS manager role to write records in fifty9.net
+# Assume the 59madison DNS manager role to write records in example.net
 generate "provider_route53" {
   path      = "provider_route53.tf"
   if_exists = "overwrite_terragrunt"
@@ -47,9 +47,9 @@ locals {
 
 inputs = {
   app_alias        = local.app_alias
-  record_name      = "argus-${include.inputs.env}.fifty9.net"
+  record_name      = "argus-${include.inputs.env}.example.net"
   record_type      = "CNAME"
   records          = [dependency.cloudfront.outputs.cloudfront_distribution_domain_name]
-  hosted_zone_name = "fifty9.net"
+  hosted_zone_name = "example.net"
   ttl              = 300
 }

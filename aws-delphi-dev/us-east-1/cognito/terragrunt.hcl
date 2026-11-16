@@ -41,11 +41,11 @@ inputs = {
       # saml_metadata_document_url = "<SAML_METADATA_URL>"
       callback_urls = [
         "http://localhost:9000/auth/callback",
-        "https://argus-${include.inputs.env}.fifty9.net/auth/callback",
+        "https://argus-${include.inputs.env}.example.net/auth/callback",
       ]
       logout_urls = [
         "http://localhost:9000/login",
-        "https://argus-${include.inputs.env}.fifty9.net/login",
+        "https://argus-${include.inputs.env}.example.net/login",
       ]
       allowed_oauth_flows          = ["code"]
       allowed_oauth_scopes         = ["openid", "email", "profile"]

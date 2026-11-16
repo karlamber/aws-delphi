@@ -33,7 +33,7 @@ dependency "tls" {
 locals {
   app_alias     = "argus"
   api_origin_id = "${local.app_alias}-apigw-origin"
-  domain_name   = "argus-${include.inputs.env}.fifty9.net"
+  domain_name   = "argus-${include.inputs.env}.example.net"
 
   # AWS managed policies
   cache_caching_optimized          = "658327ea-f89d-4fab-a63d-7e88639e58f6"

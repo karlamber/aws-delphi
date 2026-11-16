@@ -36,7 +36,7 @@ variable "app_alias" {
 }
 
 variable "record_name" {
-  description = "The name of the DNS record (e.g., argus-dev.fifty9.net)"
+  description = "The name of the DNS record (e.g., argus-dev.example.net)"
   type        = string
 }
 
@@ -52,7 +52,7 @@ variable "records" {
 }
 
 variable "hosted_zone_name" {
-  description = "The name of the hosted zone in the Route53 account (e.g., fifty9.net)"
+  description = "The name of the hosted zone in the Route53 account (e.g., example.net)"
   type        = string
 }
 

@@ -38,6 +38,6 @@ locals {
 
 inputs = {
   app_alias        = local.app_alias
-  domain_name      = "argus-${include.inputs.env}.fifty9.net"
-  hosted_zone_name = "fifty9.net"
+  domain_name      = "argus-${include.inputs.env}.example.net"
+  hosted_zone_name = "example.net"
 }

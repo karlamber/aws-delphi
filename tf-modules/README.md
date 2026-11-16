@@ -13,8 +13,8 @@ Copied from the sanitized `examples/terraform-modules/modules` library plus `tf-
 | `tf-apigw` | HTTP API Gateway → Lambda |
 | `tf-cloudfront` | Argus SPA distribution |
 | `tf-tls` | ACM certificate; DNS validation via `aws.route53` in the Route53/mgmt account |
-| `tf-dns_record` | Route53 record in fifty9.net via `aws.route53` in the Route53/mgmt account |
-| `tf-s3` | SPA artifact bucket |
+| `tf-dns_record` | Route53 record in example.net via `aws.route53` in the Route53/mgmt account |
+| `tf-s3` | S3 bucket. `us-east-1/s3-lambda-artifacts` is the shared Lambda zip bucket for the account |
 | `tf-cloudwatch` | CloudWatch logging role |
 | `tf-iam-lambda-policy` | Standard Lambda execution policy |
 | `tf-ssm_param` | SSM parameters |

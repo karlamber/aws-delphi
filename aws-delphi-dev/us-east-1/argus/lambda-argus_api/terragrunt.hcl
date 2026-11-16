@@ -6,30 +6,40 @@ terraform {
     execute  = ["bash", "-c", "set -e; VERSION=$(grep -m1 -E 'required_version\\s*=' providers.tf | sed -n 's/.*= *\"\\([^\"]*\\)\".*/\\1/p' | sed 's/^~> *//;s/^>= *//;s/^> *//;s/^<= *//;s/^< *//;s/^[[:space:]]*//;s/[[:space:]]*$//'); if [ -n \"$VERSION\" ]; then tfenv use \"$VERSION\"; else echo 'No required_version found in providers.tf, skipping tfenv.'; fi"]
   }
 
-  before_hook "copy_lambda_artifact" {
-    commands = ["init", "apply", "plan"]
+  # Shared aws-delphi-dev zip bucket. Creates this Lambda's key only when the object is missing.
+  before_hook "ensure_lambda_zip" {
+    commands = ["plan", "apply"]
     execute = ["bash", "-c", <<-EOT
-      set -e
-      SOURCE_BUCKET="${include.inputs.artifact_bucket}"
-      SOURCE_KEY="test-lambda.zip"
-      DEST_BUCKET="${include.inputs.artifact_bucket}"
-      DEST_KEY="${local.artifact_key}"
-      AWS_PROFILE="59madison"
+      set -euo pipefail
+      BUCKET="${dependency.s3_lambda_artifacts.outputs.bucket_name}"
+      KEY="${local.artifact_key}"
+      AWS_PROFILE="${include.inputs.aws_profile}"
 
-      echo "Checking if source artifact exists..."
-      if ! aws --profile $AWS_PROFILE s3api head-object --bucket "$SOURCE_BUCKET" --key "$SOURCE_KEY" >/dev/null 2>&1; then
-        echo "ERROR: Source artifact s3://$SOURCE_BUCKET/$SOURCE_KEY does not exist"
-        exit 1
+      if aws --profile "$AWS_PROFILE" s3api head-object --bucket "$BUCKET" --key "$KEY" >/dev/null 2>&1; then
+        echo "Lambda artifact already exists at s3://$BUCKET/$KEY"
+        exit 0
       fi
 
-      echo "Checking if destination artifact exists..."
-      if aws --profile $AWS_PROFILE s3api head-object --bucket "$DEST_BUCKET" --key "$DEST_KEY" >/dev/null 2>&1; then
-        echo "Lambda artifact already exists at s3://$DEST_BUCKET/$DEST_KEY"
-      else
-        echo "Copying lambda artifact from s3://$SOURCE_BUCKET/$SOURCE_KEY to s3://$DEST_BUCKET/$DEST_KEY"
-        aws --profile $AWS_PROFILE s3 cp "s3://$SOURCE_BUCKET/$SOURCE_KEY" "s3://$DEST_BUCKET/$DEST_KEY"
-        echo "Copy completed successfully"
-      fi
+      tmp=$(mktemp -d)
+      trap 'rm -rf "$tmp"' EXIT
+      cat > "$tmp/handler.js" <<'JS'
+exports.handler = async () => ({
+  statusCode: 200,
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify({ status: "placeholder" }),
+});
+JS
+      TMP_ARTIFACT="$tmp" python3 - <<'PY'
+import os
+import pathlib
+import zipfile
+
+root = pathlib.Path(os.environ["TMP_ARTIFACT"])
+with zipfile.ZipFile(root / "placeholder.zip", "w", compression=zipfile.ZIP_DEFLATED) as archive:
+    archive.write(root / "handler.js", "handler.js")
+PY
+      echo "Uploading placeholder zip to s3://$BUCKET/$KEY"
+      aws --profile "$AWS_PROFILE" s3 cp "$tmp/placeholder.zip" "s3://$BUCKET/$KEY" --content-type application/zip
     EOT
     ]
   }
@@ -41,12 +51,20 @@ include {
 }
 
 locals {
-  app_alias   = "argus"
-  detail      = "argus_api"
-  description = "Argus CMDB API Lambda (argus-api-lambda)"
-  # Artifact bucket/key — align with argus-api-lambda deploy workflow / .env.deploy.example
-  artifact_bucket = include.inputs.artifact_bucket
-  artifact_key    = "${local.app_alias}/${include.inputs.env}/${local.app_alias}-${local.detail}.zip"
+  app_alias    = "argus"
+  detail       = "argus_api"
+  description  = "Argus CMDB API Lambda (argus-api-lambda)"
+  artifact_key = "${local.app_alias}/${include.inputs.env}/${local.app_alias}-${local.detail}.zip"
+}
+
+dependency "s3_lambda_artifacts" {
+  config_path = "../../s3-lambda-artifacts"
+
+  mock_outputs = {
+    bucket_name = "s3-mock-lambda"
+    bucket_arn  = "arn:aws:s3:::s3-mock-lambda"
+  }
+  mock_outputs_allowed_terraform_commands = ["validate", "init"]
 }
 
 dependency "lambda_policy" {
@@ -121,7 +139,7 @@ inputs = {
     application_log_level          = "INFO"
     system_log_level               = "INFO"
     log_format                     = "JSON"
-    s3_bucket                      = local.artifact_bucket
+    s3_bucket                      = dependency.s3_lambda_artifacts.outputs.bucket_name
     s3_key                         = local.artifact_key
     environment = {
       variables = {
@@ -134,7 +152,7 @@ inputs = {
         # Seed PGPASSWORD and BASIC_AUTH_* via SSM or console — do not commit secrets here.
         PGPASSWORD                 = "<SEED_VIA_SSM_OR_CONSOLE>"
         AUTH_MODE                  = "cognito"
-        CORS_ORIGIN                = "https://argus-${include.inputs.env}.fifty9.net"
+        CORS_ORIGIN                = "https://argus-${include.inputs.env}.example.net"
         COGNITO_USER_POOL_ID       = dependency.cognito.outputs.user_pool_ids["employees"]
         COGNITO_APP_CLIENT_ID      = dependency.cognito.outputs.app_client_ids["argus"]
         COGNITO_ISSUER             = "https://cognito-idp.${include.inputs.region}.amazonaws.com/${dependency.cognito.outputs.user_pool_ids["employees"]}"
@@ -173,7 +191,7 @@ inputs = {
         Sid    = "ReadDeploymentPackage"
         Effect = "Allow"
         Action = ["s3:GetObject", "s3:GetObjectVersion"]
-        Resource = "arn:aws:s3:::${local.artifact_bucket}/*"
+        Resource = "${dependency.s3_lambda_artifacts.outputs.bucket_arn}/*"
       }
     ]
   }
