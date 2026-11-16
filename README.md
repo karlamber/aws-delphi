@@ -8,29 +8,31 @@ This repository is the Terragrunt configuration for the Delphi landscape, which 
 aws-delphi/
 ├── root.hcl
 ├── tf-modules/           # landscape-local modules
-└── aws-delphi-dev/       # member account folder (env=dev)
-    ├── account.hcl.example   # committed placeholders
-    ├── account.hcl           # gitignored — real IDs (copy from example)
-    └── us-east-1/
-        ├── vpc, cognito, cloudwatch_logging, github_oidc_*
-        ├── s3-lambda-artifacts
-        └── argus/
+├── aws-delphi-dev/       # member account folder (env=dev, VPC 10.0.0.0/21)
+│   ├── account.hcl.example   # committed placeholders
+│   ├── account.hcl           # gitignored — real IDs (copy from example)
+│   └── us-east-1/
+│       ├── vpc, cognito, cloudwatch_logging, github_oidc_*
+│       ├── s3-lambda-artifacts
+│       └── argus/
+└── aws-delphi-prod/      # member account folder (env=prod, VPC 10.0.48.0/21)
+    └── (the same stacks as dev)
 ```
 
-`root.hcl` generates the AWS provider and the S3 backend. Each directory that contains a `terragrunt.hcl` is one stack, and `aws-delphi-dev/account.hcl` supplies the account id, profile, DNS role, and OIDC subjects for every stack under that account.
+`root.hcl` generates the AWS provider and the S3 backend. Each directory that contains a `terragrunt.hcl` is one stack. `aws-delphi-dev/account.hcl` and `aws-delphi-prod/account.hcl` each supply the account id, profile, DNS role, and OIDC subjects for the stacks under that account. Dev owns `10.0.0.0/20` and prod owns `10.0.48.0/20`. The us-east-1 VPC in each folder is the first `/21` of that block, set in that folder's `us-east-1/vpc/terragrunt.hcl`.
 
 ## Prerequisites
 
-The AWS account must already exist before you plan anything in this repository. Copy `aws-delphi-dev/account.hcl.example` to `aws-delphi-dev/account.hcl`, set `account_id` to that account's 12-digit number, set `account_name` to the name you use for the account, and set `aws_profile` to a local CLI profile that targets the same account. `root.hcl` pins `allowed_account_ids` to `account_id`, so a profile pointed at a different account fails before any resource is changed. Sign in and confirm the caller:
+The AWS account must already exist before you plan anything in this repository. Copy `account.hcl.example` to `account.hcl` inside the account folder you are applying (`aws-delphi-dev` or `aws-delphi-prod`), set `account_id` to that account's 12-digit number, set `account_name` to the name you use for the account, and set `aws_profile` to a local CLI profile that targets the same account. `root.hcl` pins `allowed_account_ids` to `account_id`, so a profile pointed at a different account fails before any resource is changed. Sign in and confirm the caller:
 
 ```bash
 aws sso login --profile aws-delphi-dev
 aws sts get-caller-identity --profile aws-delphi-dev
 ```
 
-Use the profile name you wrote into `account.hcl` if it is not `aws-delphi-dev`.
+Use the profile name you wrote into `account.hcl` if it is not `aws-delphi-dev` or `aws-delphi-prod`. Prod uses the same sign-in commands with `--profile aws-delphi-prod`.
 
-Public hostnames in this sample use `example.net`, the reserved documentation zone, as in `argus-dev.example.net`. Before an apply, replace `example.net` in five files under `aws-delphi-dev/us-east-1/`: `cognito/terragrunt.hcl` (callback and logout URLs), `argus/lambda-argus_api/terragrunt.hcl` (`CORS_ORIGIN`), `argus/cloudfront/terragrunt.hcl` (distribution alias), `argus/tls/terragrunt.hcl` (certificate name and hosted zone), and `argus/dns_record/terragrunt.hcl` (record name and hosted zone). Repeat that edit in each environment folder you add later. Descriptions inside `tf-modules/` that mention `example.net` are examples, and changing them does not change what AWS creates. The `tls` and `dns_record` stacks assume a role that can write records in the zone you substitute, which means `route53_account_id` must be the account that owns the zone and `dns_manager_role_arn` must be a role your profile is allowed to assume. GitHub Actions deploys trust the subjects in `oidc_subjects`. Replace the example values with the organization and repository that will publish the API and the front end. Database passwords and other secrets are seeded outside Terraform. The SSM parameter module ignores later changes to those values, and secret material does not belong in any file in this repository.
+Public hostnames in this sample use `example.net`, the reserved documentation zone, as in `argus-dev.example.net` and `argus-prod.example.net`. Before an apply, replace `example.net` in five files under both `aws-delphi-dev/us-east-1/` and `aws-delphi-prod/us-east-1/`: `cognito/terragrunt.hcl` (callback and logout URLs), `argus/lambda-argus_api/terragrunt.hcl` (`CORS_ORIGIN`), `argus/cloudfront/terragrunt.hcl` (distribution alias), `argus/tls/terragrunt.hcl` (certificate name and hosted zone), and `argus/dns_record/terragrunt.hcl` (record name and hosted zone). Descriptions inside `tf-modules/` that mention `example.net` are examples, and changing them does not change what AWS creates. The `tls` and `dns_record` stacks assume a role that can write records in the zone you substitute, which means `route53_account_id` must be the account that owns the zone and `dns_manager_role_arn` must be a role your profile is allowed to assume. GitHub Actions deploys trust the subjects in `oidc_subjects`. Replace the example values with the organization and repository that will publish the API and the front end. Database passwords and other secrets are seeded outside Terraform. The SSM parameter module ignores later changes to those values, and secret material does not belong in any file in this repository.
 
 `account.hcl` is gitignored. After you fill it in, `git status` should not list that file, and a search of the tree should not find access keys or private keys:
 
@@ -41,10 +43,13 @@ git grep -E 'AKIA[0-9A-Z]{16}|BEGIN (RSA |OPENSSH )?PRIVATE' -- ':!*.lock.hcl' |
 
 ## Plan
 
-From `aws-delphi-dev`, the first plan creates the remote state bucket and validates every stack:
+From the account folder you are applying, the first plan creates that account's remote state bucket and validates every stack. Dev and prod are separate accounts, so run this once in each folder, with the profile that matches that folder's `account.hcl`:
 
 ```bash
 cd aws-delphi-dev
+terragrunt plan --backend-bootstrap --all
+
+cd ../aws-delphi-prod
 terragrunt plan --backend-bootstrap --all
 ```
 
@@ -58,11 +63,11 @@ Clone this repository, `argus-api-lambda`, and `argus-front-end` as sibling dire
 
 Publish the API next. From `argus-api-lambda`, `npm run zip` produces `bundle.zip`, and the deploy section of that repository's README copies it to `s3-delphi-dev-ue1-<account_id>-lambda-artifacts` at `argus/dev/argus-argus_api.zip`, then calls `aws lambda update-function-code` on `lambda-argus-dev-ue1-argus_api`. That replaces the placeholder object the Lambda before-hook uploaded.
 
-Publish the SPA last. From `argus-front-end`, the CloudFront section of that repository's README syncs `dist/` to `s3-argus-dev-ue1-<account_id>-cf-origin` and invalidates the distribution. The browser calls `/api` on the same host, and CloudFront forwards `/api/*` to API Gateway. Hosted-UI sign-in uses `https://argus-dev.example.net` because that hostname is the Cognito callback registered for the `argus` app client. The CloudFront domain name from `terragrunt output cloudfront_distribution_domain_name` serves the files as soon as the invalidation finishes. The alias answers after the DNS stack has written the record.
+Publish the SPA last. From `argus-front-end`, the CloudFront section of that repository's README syncs `dist/` to `s3-argus-dev-ue1-<account_id>-cf-origin` and invalidates the distribution. The browser calls `/api` on the same host, and CloudFront forwards `/api/*` to API Gateway. Hosted-UI sign-in uses `https://argus-dev.example.net` because that hostname is the Cognito callback registered for the `argus` app client. The CloudFront domain name from `terragrunt output cloudfront_distribution_domain_name` serves the files as soon as the invalidation finishes. The alias answers after the DNS stack has written the record. Prod uses the same publish steps with `prod` in the names: `s3-delphi-prod-ue1-<account_id>-lambda-artifacts`, `argus/prod/argus-argus_api.zip`, `lambda-argus-prod-ue1-argus_api`, `s3-argus-prod-ue1-<account_id>-cf-origin`, and `https://argus-prod.example.net`.
 
 ## Promotion
 
-Promote by planning `dev`, then `tst`, then `prod`, with each stack planned on its own. This repository currently contains the `dev` account folder.
+Promote by planning `dev`, then `tst`, then `prod`, with each stack planned on its own. This repository contains the `dev` and `prod` account folders. There is no `tst` folder yet.
 
 ## Git: create the repo and push
 
