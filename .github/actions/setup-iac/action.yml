@@ -1,0 +1,40 @@
+name: Setup Terraform and Terragrunt
+description: >-
+  Install the Terraform and Terragrunt versions pinned in
+  .github/terraform-versions.env. The Terraform wrapper is disabled so
+  Terragrunt receives the real CLI exit code.
+
+inputs:
+  terraform_version:
+    description: Terraform version that satisfies the module constraint.
+    required: true
+  terragrunt_version:
+    description: Terragrunt release tag without a leading v.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install Terraform
+      uses: hashicorp/setup-terraform@dfe3c3f87815947d99a8997f908cb6525fc44e9e # v4.0.1
+      with:
+        terraform_version: ${{ inputs.terraform_version }}
+        terraform_wrapper: false
+
+    - name: Install Terragrunt
+      shell: bash
+      run: |
+        set -euo pipefail
+        case "$(uname -m)" in
+          x86_64) arch=amd64 ;;
+          aarch64|arm64) arch=arm64 ;;
+          *) echo "Unsupported runner architecture: $(uname -m)" >&2; exit 1 ;;
+        esac
+        version="${{ inputs.terragrunt_version }}"
+        install_dir="${RUNNER_TEMP}/bin"
+        mkdir -p "$install_dir"
+        curl -fsSL -o "${install_dir}/terragrunt" \
+          "https://github.com/gruntwork-io/terragrunt/releases/download/v${version}/terragrunt_linux_${arch}"
+        chmod +x "${install_dir}/terragrunt"
+        echo "$install_dir" >> "$GITHUB_PATH"
+        "${install_dir}/terragrunt" --version

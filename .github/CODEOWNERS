@@ -1,0 +1,7 @@
+# Replace the commented owners with a GitHub team or user before you require
+# CODEOWNERS review in branch protection. A commented rule does not block a
+# pull request. Uncommenting a name that does not exist in this repository
+# makes production and workflow changes unmergeable.
+#
+# /aws-delphi-prod/ @EXAMPLE_GITHUB_ORG/devops
+# /.github/ @EXAMPLE_GITHUB_ORG/devops

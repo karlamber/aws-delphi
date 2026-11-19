@@ -1,0 +1,199 @@
+# Speculative Terragrunt plan for a pull request.
+#
+# Clone setup, all of which is described in the README:
+#   GitHub Environments dev-plan and prod-plan, with no required reviewers.
+#   Environment variables AWS_ACCOUNT_ID, AWS_ROLE_TO_ASSUME (the plan role),
+#   ROUTE53_ACCOUNT_ID, DNS_MANAGER_ROLE_ARN, APP_OIDC_SUBJECTS,
+#   IAC_PLAN_OIDC_SUBJECT, IAC_APPLY_OIDC_SUBJECT, IAC_APPLY_JOB_WORKFLOW_REF.
+# The plan role cannot be assumed until those roles have been applied once
+# from a laptop. This workflow does not apply, and it does not upload a plan file.
+
+name: Terragrunt plan
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: terragrunt-plan-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect changed accounts
+    runs-on: ubuntu-latest
+    outputs:
+      dev: ${{ steps.accounts.outputs.dev }}
+      prod: ${{ steps.accounts.outputs.prod }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Compare the pull request with its base
+        id: accounts
+        run: |
+          set -euo pipefail
+          eval "$(.github/scripts/changed-accounts.sh \
+            "${{ github.event.pull_request.base.sha }}" \
+            "${{ github.sha }}")"
+          echo "dev=$dev" >> "$GITHUB_OUTPUT"
+          echo "prod=$prod" >> "$GITHUB_OUTPUT"
+
+  plan:
+    name: Plan ${{ matrix.env }}
+    needs: changes
+    if: >-
+      (matrix.env == 'dev' && needs.changes.outputs.dev == 'run') ||
+      (matrix.env == 'prod' && needs.changes.outputs.prod == 'run')
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.github_environment }}
+    permissions:
+      id-token: write
+      contents: read
+      pull-requests: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - env: dev
+            account_dir: aws-delphi-dev
+            github_environment: dev-plan
+          - env: prod
+            account_dir: aws-delphi-prod
+            github_environment: prod-plan
+    env:
+      ACCOUNT_ENV: ${{ matrix.env }}
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      ROUTE53_ACCOUNT_ID: ${{ vars.ROUTE53_ACCOUNT_ID }}
+      DNS_MANAGER_ROLE_ARN: ${{ vars.DNS_MANAGER_ROLE_ARN }}
+      APP_OIDC_SUBJECTS: ${{ vars.APP_OIDC_SUBJECTS }}
+      IAC_PLAN_OIDC_SUBJECT: ${{ vars.IAC_PLAN_OIDC_SUBJECT }}
+      IAC_APPLY_OIDC_SUBJECT: ${{ vars.IAC_APPLY_OIDC_SUBJECT }}
+      IAC_APPLY_JOB_WORKFLOW_REF: ${{ vars.IAC_APPLY_JOB_WORKFLOW_REF }}
+      ALLOW_DESTROY: ${{ contains(github.event.pull_request.labels.*.name, 'allow-destroy') && 'true' || 'false' }}
+      TF_IN_AUTOMATION: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Read tool versions
+        id: versions
+        run: |
+          set -euo pipefail
+          set -a
+          # shellcheck disable=SC1091
+          source .github/terraform-versions.env
+          set +a
+          echo "terraform_version=$TERRAFORM_VERSION" >> "$GITHUB_OUTPUT"
+          echo "terragrunt_version=$TERRAGRUNT_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install Terraform and Terragrunt
+        uses: ./.github/actions/setup-iac
+        with:
+          terraform_version: ${{ steps.versions.outputs.terraform_version }}
+          terragrunt_version: ${{ steps.versions.outputs.terragrunt_version }}
+
+      - name: Write account.hcl from environment variables
+        run: .github/scripts/render-account-hcl.sh "${{ matrix.account_dir }}"
+
+      - name: Read the region
+        id: region
+        run: |
+          set -euo pipefail
+          region_file="$(find "${{ matrix.account_dir }}" -name region.hcl -print -quit)"
+          region="$(sed -n 's/^[[:space:]]*region[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$region_file")"
+          if [ -z "$region" ]; then
+            echo "No region found in $region_file. This workflow expects one region.hcl per account." >&2
+            exit 1
+          fi
+          echo "name=$region" >> "$GITHUB_OUTPUT"
+
+      - name: Assume the plan role
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ steps.region.outputs.name }}
+          role-session-name: gha-terragrunt-plan-${{ matrix.env }}
+          mask-aws-account-id: false
+
+      - name: Plan changed units
+        id: plan
+        continue-on-error: true
+        run: >-
+          .github/scripts/run-terragrunt.sh plan
+          "${{ matrix.account_dir }}"
+          "${{ github.event.pull_request.base.sha }}"
+          "${{ github.sha }}"
+
+      - name: Comment on the pull request
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          ACCOUNT_ENV: ${{ matrix.env }}
+          PLAN_FILE: plan.txt
+        with:
+          script: |
+            const fs = require('fs')
+            const marker = `<!-- terragrunt-plan ${process.env.ACCOUNT_ENV} -->`
+            let text = fs.existsSync(process.env.PLAN_FILE)
+              ? fs.readFileSync(process.env.PLAN_FILE, 'utf8')
+              : 'The plan produced no output.'
+            text = text.replace(/```/g, "'''")
+            const max = 60000
+            if (text.length > max) {
+              text = text.slice(0, max) + '\n\n[truncated]\n'
+            }
+            const body = [
+              marker,
+              `### Terragrunt plan (${process.env.ACCOUNT_ENV})`,
+              '',
+              'This plan is speculative. Merging the pull request plans again on main and applies that plan.',
+              '',
+              '```',
+              text.trimEnd(),
+              '```',
+              '',
+            ].join('\n')
+            const { owner, repo } = context.repo
+            const issue_number = context.issue.number
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner, repo, issue_number,
+            })
+            const existing = comments.find((comment) => comment.body && comment.body.includes(marker))
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner, repo, comment_id: existing.id, body,
+              })
+            } else {
+              await github.rest.issues.createComment({
+                owner, repo, issue_number, body,
+              })
+            }
+
+      - name: Fail the check when the plan failed
+        if: steps.plan.outcome == 'failure'
+        run: exit 1
+
+  gate:
+    name: Terragrunt plan
+    needs: [changes, plan]
+    if: always() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the account plans to succeed
+        run: |
+          set -euo pipefail
+          changes="${{ needs.changes.result }}"
+          plan="${{ needs.plan.result }}"
+          if [ "$changes" = "failure" ] || [ "$plan" = "failure" ]; then
+            echo "Terragrunt plan failed. A skipped account means that account had no changes."
+            exit 1
+          fi
+          echo "Terragrunt plan finished. changes=$changes plan=$plan"

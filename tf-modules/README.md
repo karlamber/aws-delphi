@@ -17,6 +17,7 @@ Copied from the sanitized `examples/terraform-modules/modules` library plus `tf-
 | `tf-s3` | S3 bucket. `us-east-1/s3-lambda-artifacts` is the shared Lambda zip bucket for the account |
 | `tf-cloudwatch` | CloudWatch logging role |
 | `tf-iam-lambda-policy` | Standard Lambda execution policy |
+| `tf-github-oidc-iac-role` | GitHub Actions plan or apply role for this landscape |
 | `tf-ssm_param` | SSM parameters |
 | `tf-waf` | WAF (optional, attach to CloudFront) |
 

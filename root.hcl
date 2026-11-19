@@ -10,15 +10,22 @@ locals {
   aws_profile  = local.account_vars.locals.aws_profile
   region       = local.region_vars.locals.region
   env          = local.account_vars.locals.env
+
+  # GitHub Actions sets GITHUB_ACTIONS. Runners have no AWS profile; they use the
+  # OIDC credentials from aws-actions/configure-aws-credentials. Laptops still
+  # pass the profile named in account.hcl.
+  in_github_actions = get_env("GITHUB_ACTIONS", "") != ""
 }
 
 generate "provider" {
   path      = "provider.tf"
   if_exists = "overwrite_terragrunt"
-  contents  = <<EOF
+  contents  = <<-EOF
 provider "aws" {
   region              = "${local.region}"
+%{if !local.in_github_actions~}
   profile             = "${local.aws_profile}"
+%{endif~}
   allowed_account_ids = ["${local.account_id}"]
   default_tags {
     tags = {
@@ -33,14 +40,16 @@ EOF
 
 remote_state {
   backend = "s3"
-  config = {
-    encrypt      = true
-    bucket       = "s3-${local.landscape}-${local.env}-${local.region_short}-${local.account_id}-terraform-state"
-    key          = "${path_relative_to_include()}/terraform.tfstate"
-    region       = local.region
-    use_lockfile = true
-    profile      = local.aws_profile
-  }
+  config = merge(
+    {
+      encrypt      = true
+      bucket       = "s3-${local.landscape}-${local.env}-${local.region_short}-${local.account_id}-terraform-state"
+      key          = "${path_relative_to_include()}/terraform.tfstate"
+      region       = local.region
+      use_lockfile = true
+    },
+    local.in_github_actions ? {} : { profile = local.aws_profile },
+  )
   generate = {
     path      = "backend.tf"
     if_exists = "overwrite_terragrunt"

@@ -1,0 +1,168 @@
+# Apply Terragrunt after a merge to main.
+#
+# The pull request plan is not replayed. This job plans again on main and
+# applies that saved plan in the same runner. Dev starts when the push lands.
+# Prod uses the prod environment, so GitHub waits for the required reviewers
+# and only then mints the OIDC token.
+#
+# Re-run a failed job from the Actions tab to retry the same commits. To
+# apply every unit, including units a later merge did not retry, run this
+# workflow manually with reconcile set to true.
+#
+# Clone setup: GitHub Environments dev and prod. dev allows only main and has
+# no required reviewers. prod allows only main and has required reviewers.
+# AWS_ROLE_TO_ASSUME on those environments is the apply role ARN. The other
+# variables match the plan environments. See the README.
+
+name: Terragrunt apply
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Account to apply
+        type: choice
+        default: both
+        options:
+          - dev
+          - prod
+          - both
+      reconcile:
+        description: Apply every unit in the selected account. Use this after a failed apply that a later merge did not retry.
+        type: boolean
+        default: false
+      before_sha:
+        description: First commit of the range. Required unless reconcile is true. Copy it from the failed run.
+        type: string
+        required: false
+      after_sha:
+        description: Last commit of the range. Defaults to the current main SHA.
+        type: string
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    name: Detect changed accounts
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    outputs:
+      dev: ${{ steps.accounts.outputs.dev }}
+      prod: ${{ steps.accounts.outputs.prod }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - name: Compare the push with its parent
+        id: accounts
+        run: |
+          set -euo pipefail
+          eval "$(.github/scripts/changed-accounts.sh \
+            "${{ github.event.before }}" \
+            "${{ github.sha }}")"
+          echo "dev=$dev" >> "$GITHUB_OUTPUT"
+          echo "prod=$prod" >> "$GITHUB_OUTPUT"
+
+  apply:
+    name: Apply ${{ matrix.env }}
+    needs: changes
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      !cancelled() &&
+      (needs.changes.result == 'success' || needs.changes.result == 'skipped') &&
+      (
+        (github.event_name == 'workflow_dispatch' && (inputs.environment == 'both' || inputs.environment == matrix.env)) ||
+        (github.event_name == 'push' && matrix.env == 'dev' && needs.changes.outputs.dev == 'run') ||
+        (github.event_name == 'push' && matrix.env == 'prod' && needs.changes.outputs.prod == 'run')
+      )
+    runs-on: ubuntu-latest
+    environment: ${{ matrix.github_environment }}
+    concurrency:
+      group: terragrunt-apply-${{ matrix.env }}
+      cancel-in-progress: false
+    permissions:
+      id-token: write
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - env: dev
+            account_dir: aws-delphi-dev
+            github_environment: dev
+          - env: prod
+            account_dir: aws-delphi-prod
+            github_environment: prod
+    env:
+      ACCOUNT_ENV: ${{ matrix.env }}
+      AWS_ACCOUNT_ID: ${{ vars.AWS_ACCOUNT_ID }}
+      ROUTE53_ACCOUNT_ID: ${{ vars.ROUTE53_ACCOUNT_ID }}
+      DNS_MANAGER_ROLE_ARN: ${{ vars.DNS_MANAGER_ROLE_ARN }}
+      APP_OIDC_SUBJECTS: ${{ vars.APP_OIDC_SUBJECTS }}
+      IAC_PLAN_OIDC_SUBJECT: ${{ vars.IAC_PLAN_OIDC_SUBJECT }}
+      IAC_APPLY_OIDC_SUBJECT: ${{ vars.IAC_APPLY_OIDC_SUBJECT }}
+      IAC_APPLY_JOB_WORKFLOW_REF: ${{ vars.IAC_APPLY_JOB_WORKFLOW_REF }}
+      RECONCILE: ${{ github.event_name == 'workflow_dispatch' && inputs.reconcile && 'true' || 'false' }}
+      TF_IN_AUTOMATION: "true"
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Read tool versions
+        id: versions
+        run: |
+          set -euo pipefail
+          set -a
+          # shellcheck disable=SC1091
+          source .github/terraform-versions.env
+          set +a
+          echo "terraform_version=$TERRAFORM_VERSION" >> "$GITHUB_OUTPUT"
+          echo "terragrunt_version=$TERRAGRUNT_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Install Terraform and Terragrunt
+        uses: ./.github/actions/setup-iac
+        with:
+          terraform_version: ${{ steps.versions.outputs.terraform_version }}
+          terragrunt_version: ${{ steps.versions.outputs.terragrunt_version }}
+
+      - name: Write account.hcl from environment variables
+        run: .github/scripts/render-account-hcl.sh "${{ matrix.account_dir }}"
+
+      - name: Read the region
+        id: region
+        run: |
+          set -euo pipefail
+          region_file="$(find "${{ matrix.account_dir }}" -name region.hcl -print -quit)"
+          region="$(sed -n 's/^[[:space:]]*region[[:space:]]*=[[:space:]]*"\([^"]*\)".*/\1/p' "$region_file")"
+          if [ -z "$region" ]; then
+            echo "No region found in $region_file. This workflow expects one region.hcl per account." >&2
+            exit 1
+          fi
+          echo "name=$region" >> "$GITHUB_OUTPUT"
+
+      - name: Assume the apply role
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_TO_ASSUME }}
+          aws-region: ${{ steps.region.outputs.name }}
+          role-session-name: gha-terragrunt-apply-${{ matrix.env }}
+          mask-aws-account-id: false
+
+      - name: Plan on main and apply that plan
+        env:
+          BASE_SHA: ${{ github.event_name == 'workflow_dispatch' && inputs.before_sha || github.event.before }}
+          HEAD_SHA: ${{ github.event_name == 'workflow_dispatch' && (inputs.after_sha != '' && inputs.after_sha || github.sha) || github.sha }}
+        run: >-
+          .github/scripts/run-terragrunt.sh apply
+          "${{ matrix.account_dir }}"
+          "$BASE_SHA"
+          "$HEAD_SHA"

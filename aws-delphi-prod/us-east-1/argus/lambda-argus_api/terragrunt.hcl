@@ -3,7 +3,7 @@ terraform {
 
   before_hook "use_correct_terraform_version" {
     commands = ["init", "apply", "plan", "destroy", "output"]
-    execute  = ["bash", "-c", "set -e; VERSION=$(grep -m1 -E 'required_version\\s*=' providers.tf | sed -n 's/.*= *\"\\([^\"]*\\)\".*/\\1/p' | sed 's/^~> *//;s/^>= *//;s/^> *//;s/^<= *//;s/^< *//;s/^[[:space:]]*//;s/[[:space:]]*$//'); if [ -n \"$VERSION\" ]; then tfenv use \"$VERSION\"; else echo 'No required_version found in providers.tf, skipping tfenv.'; fi"]
+    execute  = ["bash", "-c", "set -e; VERSION=$(grep -m1 -E 'required_version\\s*=' providers.tf | sed -n 's/.*= *\"\\([^\"]*\\)\".*/\\1/p' | sed 's/^~> *//;s/^>= *//;s/^> *//;s/^<= *//;s/^< *//;s/^[[:space:]]*//;s/[[:space:]]*$//'); if ! command -v tfenv >/dev/null 2>&1; then echo 'tfenv is not installed, skipping version switch.'; exit 0; fi; if [ -n \"$VERSION\" ]; then tfenv use \"$VERSION\"; else echo 'No required_version found in providers.tf, skipping tfenv.'; fi"]
   }
 
   # Shared aws-delphi-dev zip bucket. Creates this Lambda's key only when the object is missing.
@@ -14,8 +14,14 @@ terraform {
       BUCKET="${dependency.s3_lambda_artifacts.outputs.bucket_name}"
       KEY="${local.artifact_key}"
       AWS_PROFILE="${include.inputs.aws_profile}"
+      # GitHub-hosted runners have no AWS profile. OIDC credentials are already in the environment.
+      if [ -n "$${GITHUB_ACTIONS:-}" ] || [ -z "$AWS_PROFILE" ]; then
+        aws_cli=(aws)
+      else
+        aws_cli=(aws --profile "$AWS_PROFILE")
+      fi
 
-      if aws --profile "$AWS_PROFILE" s3api head-object --bucket "$BUCKET" --key "$KEY" >/dev/null 2>&1; then
+      if "$${aws_cli[@]}" s3api head-object --bucket "$BUCKET" --key "$KEY" >/dev/null 2>&1; then
         echo "Lambda artifact already exists at s3://$BUCKET/$KEY"
         exit 0
       fi
@@ -39,7 +45,7 @@ with zipfile.ZipFile(root / "placeholder.zip", "w", compression=zipfile.ZIP_DEFL
     archive.write(root / "handler.js", "handler.js")
 PY
       echo "Uploading placeholder zip to s3://$BUCKET/$KEY"
-      aws --profile "$AWS_PROFILE" s3 cp "$tmp/placeholder.zip" "s3://$BUCKET/$KEY" --content-type application/zip
+      "$${aws_cli[@]}" s3 cp "$tmp/placeholder.zip" "s3://$BUCKET/$KEY" --content-type application/zip
     EOT
     ]
   }
