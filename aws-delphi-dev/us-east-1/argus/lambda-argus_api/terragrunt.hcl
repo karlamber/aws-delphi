@@ -59,7 +59,7 @@ include {
 locals {
   app_alias    = "argus"
   detail       = "argus_api"
-  description  = "Argus CMDB API Lambda (argus-api-lambda)"
+  description  = "Argus CMDB API Lambda (easycmdb-api)"
   artifact_key = "${local.app_alias}/${include.inputs.env}/${local.app_alias}-${local.detail}.zip"
 }
 
