@@ -9,7 +9,7 @@ output "api_arn" {
 }
 
 output "api_endpoint" {
-  description = "Invoke URL for the API (default stage; no stage prefix in path). Append paths such as /api/... for Pluto."
+  description = "Invoke URL for the API (default stage; no stage prefix in path). Append the application's paths, such as /api/...."
   value       = aws_apigatewayv2_api.this.api_endpoint
 }
 

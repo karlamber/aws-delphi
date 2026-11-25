@@ -4,7 +4,7 @@
 -- stack: database_name = "argus", engine aurora-postgresql 17.4).
 --
 -- Lambda (`argus-api-lambda`) connects as `argus_lambda` with
--- search_path=argus (see aws-delphi-dev/.../lambda-argus_api and
+-- search_path=argus (see aws-delphi-prod/.../lambda-argus_api and
 -- src/infrastructure/db/pool.ts).
 --
 -- PASSWORD: replace CHANGE_ME in this file before the first run, or immediately
