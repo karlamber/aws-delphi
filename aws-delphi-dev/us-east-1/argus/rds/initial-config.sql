@@ -3,9 +3,9 @@
 -- Connect as master user `postgres` to database `argus` (created by the RDS
 -- stack: database_name = "argus", engine aurora-postgresql 17.4).
 --
--- Lambda (`easycmdb-api`) connects as `argus_lambda` with
+-- Lambda (`argus-api-lambda`) connects as `argus_lambda` with
 -- search_path=argus (see aws-delphi-dev/.../lambda-argus_api and
--- easycmdb-api/src/infrastructure/db/pool.ts).
+-- src/infrastructure/db/pool.ts).
 --
 -- PASSWORD: replace CHANGE_ME in this file before the first run, or immediately
 -- afterward:
@@ -14,7 +14,7 @@
 -- existing role's password.
 --
 -- DDL vs DML: tables stay owned by postgres. The Lambda role is DML-only.
--- Apply later files in easycmdb-api/db/migrations as postgres (or another
+-- Apply later files in argus-api-lambda/db/migrations as postgres (or another
 -- owner). The two migrations already baked into this schema are recorded in
 -- argus.schema_migrations so `npm run migrate` is a no-op on a fresh cluster.
 --
@@ -262,7 +262,7 @@ CREATE TRIGGER tr_resource_set_updated_at
 ALTER TABLE argus.resource OWNER TO postgres;
 
 -- ---------------------------------------------------------------------------
--- Migration bookkeeping (easycmdb-api/scripts/migrate.mjs)
+-- Migration bookkeeping (argus-api-lambda/scripts/migrate.mjs)
 -- ---------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS argus.schema_migrations (
